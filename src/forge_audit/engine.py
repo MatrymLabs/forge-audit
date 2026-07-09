@@ -1,0 +1,146 @@
+"""CARD: engine -- DiagnosticEngine: run the quality gates on a target repo.
+
+The engine ignites each gate (ruff, mypy, pytest --cov, bandit, pip-audit) against a
+target repository and returns a GateReading per gate. Two rules keep the reading honest:
+
+  1. Audit a repo with ITS OWN toolchain. Each tool is resolved from the target's
+     `.venv/bin/` first, so codeforge is graded with codeforge's installed deps and
+     config -- not with forge-audit's. Grading a green repo red because we ran the wrong
+     environment would be exactly the false-correspondence this tool exists to catch.
+  2. A gate whose tool is absent reads `not_configured` -- never faked as passing.
+
+Running a real subprocess lives behind a Runner seam so tests inject a fake and never
+shell out. No claim without evidence.
+"""
+
+from __future__ import annotations
+
+import re
+import shutil
+import subprocess
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+
+# --- Gate outcomes ---------------------------------------------------------------
+PASS = "pass"  # nosec B105 -- a gate verdict, not a password
+FAIL = "fail"
+NOT_CONFIGURED = "not_configured"
+ERROR = "error"
+
+
+@dataclass(frozen=True)
+class GateReading:
+    """One gate run against the target: what it is, how it went, the evidence."""
+
+    gate: str
+    status: str  # pass | fail | not_configured | error
+    detail: str
+    coverage: float | None = None  # only pytest --cov populates this
+
+
+@dataclass(frozen=True)
+class CommandResult:
+    """The raw result of a shelled command -- the Runner seam's return type."""
+
+    code: int
+    out: str
+
+
+# A Runner takes (argv, cwd) and returns a CommandResult. subprocess by default;
+# tests inject a fake so the suite never touches a shell, a network, or a real tool.
+Runner = Callable[[list[str], Path], CommandResult]
+
+
+def subprocess_runner(argv: list[str], cwd: Path) -> CommandResult:
+    """The production Runner: run argv in cwd, merge stderr into stdout, capture text."""
+    proc = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=600, check=False)
+    return CommandResult(proc.returncode, proc.stdout + proc.stderr)
+
+
+def _resolve(tool: str, runner: Runner, path: Path) -> str | None:
+    """Locate a tool for the REAL runner: the target's own venv first, then PATH; None if
+    absent. Under a fake runner the bare name is returned so injected tests stay simple."""
+    if runner is not subprocess_runner:
+        return tool
+    venv_tool = path / ".venv" / "bin" / tool
+    if venv_tool.is_file():
+        return str(venv_tool)
+    return shutil.which(tool)
+
+
+_COVERAGE_RE = re.compile(r"TOTAL\s+\d+\s+\d+\s+(\d+)%")
+
+
+def _parse_coverage(out: str) -> float | None:
+    """Pull the TOTAL coverage percent out of pytest-cov's terminal report."""
+    match = _COVERAGE_RE.search(out)
+    return float(match.group(1)) if match else None
+
+
+def _bandit_args(path: Path) -> list[str]:
+    """Fair bandit invocation: exclude the venv/git, gate on real (medium+) severity, and
+    honor the target's own [tool.bandit] config (its reviewed suppressions) when declared.
+
+    `--severity-level medium` is deliberate: low-severity findings (e.g. subprocess use)
+    are noise every mature repo triages, not vulnerabilities. Gating on them would fail
+    nearly every real codebase and make the verdict meaningless. We block on what matters.
+    """
+    args = ["-r", ".", "-q", "--severity-level", "medium", "--exclude", "./.venv,./.git"]
+    pyproject = path / "pyproject.toml"
+    if pyproject.is_file() and "[tool.bandit]" in pyproject.read_text(
+        encoding="utf-8", errors="ignore"
+    ):
+        args = ["-c", "pyproject.toml", *args]
+    return args
+
+
+# --- The gates, in cheapest-first order (tests handled separately for coverage) --
+# Each entry: (gate name, tool, args-after-the-tool).
+def _gate_specs(path: Path) -> tuple[tuple[str, str, list[str]], ...]:
+    return (
+        ("lint", "ruff", ["check", "."]),
+        ("typecheck", "mypy", ["."]),
+        ("security", "bandit", _bandit_args(path)),
+        ("dependencies", "pip-audit", ["--skip-editable"]),
+    )
+
+
+def run_gate(gate: str, tool: str, args: list[str], path: Path, runner: Runner) -> GateReading:
+    """Ignite one gate: skip honestly if its tool is absent, else run and read the code."""
+    resolved = _resolve(tool, runner, path)
+    if resolved is None:
+        return GateReading(gate, NOT_CONFIGURED, f"{tool} not found (no venv or PATH)")
+    try:
+        result = runner([resolved, *args], path)
+    except Exception as exc:  # a broken tool must surface, never masquerade as pass
+        return GateReading(gate, ERROR, f"{tool} raised: {exc}")
+    status = PASS if result.code == 0 else FAIL
+    return GateReading(gate, status, _summarize(result.out))
+
+
+def run_tests(path: Path, runner: Runner) -> GateReading:
+    """The tests+coverage gate: pytest --cov, parsing the TOTAL percent as evidence."""
+    resolved = _resolve("pytest", runner, path)
+    if resolved is None:
+        return GateReading("tests", NOT_CONFIGURED, "pytest not found (no venv or PATH)")
+    try:
+        result = runner([resolved, "--cov", "--cov-report=term-missing", "-q"], path)
+    except Exception as exc:
+        return GateReading("tests", ERROR, f"pytest raised: {exc}")
+    status = PASS if result.code == 0 else FAIL
+    return GateReading("tests", status, _summarize(result.out), _parse_coverage(result.out))
+
+
+def _summarize(out: str) -> str:
+    """The last non-empty line of output -- enough evidence to quote, not a wall of text."""
+    lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
+    return lines[-1] if lines else "(no output)"
+
+
+def diagnose(path: Path, runner: Runner = subprocess_runner) -> list[GateReading]:
+    """Run every gate against the target repo and return the readings in gate order."""
+    specs = _gate_specs(path)
+    readings = [run_gate(g, tool, args, path, runner) for g, tool, args in specs]
+    readings.insert(2, run_tests(path, runner))  # tests sit after typecheck
+    return readings

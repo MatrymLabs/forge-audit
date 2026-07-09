@@ -1,0 +1,60 @@
+[project]
+name = "forge-audit"
+version = "0.1.0"
+description = "The proof-tool: run the quality gates on a repo, emit a JSON scorecard."
+requires-python = ">=3.13"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "mypy",
+    "pytest",
+    "pytest-cov",
+    "pip-audit",
+    "bandit[toml]",
+]
+
+[project.scripts]
+forge-audit = "forge_audit.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+packages = ["forge_audit"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# E/F: core errors  I: import sorting  UP: modernize  B: bug patterns  SIM: simplifications
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.13"
+warn_unused_ignores = true
+mypy_path = "src"
+explicit_package_bases = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.coverage.run]
+source = ["forge_audit"]
+
+[tool.bandit]
+# Reviewed suppressions -- each inherent to a tool whose job is running gates:
+#   B101 assert    - narrowing/invariants in tests, not input validation.
+#   B404 subprocess - importing subprocess IS the point: forge-audit runs gates.
+#   B603 no-shell   - we deliberately never use shell=True; argv lists are safe.
+#   B607 partial-path - `gh` and the gate tools are resolved on PATH by design
+#                       (audit the user's installed toolchain, not a pinned copy).
+# B105 (the "pass" verdict literal reads as a password) is suppressed inline with
+# `# nosec B105` at the two constants, so the password check stays live everywhere else.
+skips = ["B101", "B404", "B603", "B607"]
