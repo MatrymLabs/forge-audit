@@ -76,15 +76,18 @@ against the stage thresholds and forges the `Scorecard`.
 The tool holds itself to its own rule. Its CI runs the dogfood step, and you can too:
 
 ```
-$ forge-audit --path . --stage entry
-  [pass     ] lint / typecheck / tests (94% ≥ 70%) / security / dependencies / ci
-  [watchlist] collaboration: no merged-PR loop observed
-VERDICT: WATCHLIST   (roles: testing · security · backend · devops)
+$ forge-audit --path . --stage entry --online --format md
+| lint | typecheck | tests (94% ≥ 70%) | security | dependencies | ci | collaboration |
+|  ✅  |    ✅     |        ✅         |   ✅     |      ✅       | ✅ |      ✅       |
+overall: ✅ pass   (roles: testing · security · backend · devops · collaboration)
 ```
 
-The lone `watchlist` is honest: this repo has no merged-PR loop yet, so the collaboration
-signal is correctly withheld — the tool refuses to claim evidence it doesn't have. That is
-the whole point: **no claim without correspondence,** even about itself.
+The collaboration signal is honest by construction: it passes only because this repo has
+a real issue → PR → merge loop ([#3](https://github.com/MatrymLabs/forge-audit/issues/3)
+→ [#4](https://github.com/MatrymLabs/forge-audit/pull/4)). Run it **without** `--online`
+and that dimension drops to `watchlist` — offline, the tool can't observe the loop, so it
+withholds the claim rather than assume it. Either way: **no claim without correspondence,**
+even about itself.
 
 ## Test
 
