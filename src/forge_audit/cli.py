@@ -26,7 +26,7 @@ _GLYPH = {PASS_V: "✅", "watchlist": "🔶", FAIL_V: "❌"}
 
 def _render_human(card: Scorecard) -> str:
     lines = [
-        f"forge-audit — {card.repo} ({card.stage} stage)",
+        f"forge-audit - {card.repo} ({card.stage} stage)",
         "",
     ]
     for d in card.dimensions:
@@ -54,7 +54,7 @@ def render_markdown(card: Scorecard) -> str:
     """
     roles = " · ".join(card.role_signals) or "(none proven)"
     lines = [
-        f"### forge-audit — {card.repo} ({card.stage} stage)",
+        f"### forge-audit - {card.repo} ({card.stage} stage)",
         "",
         "| Dimension | Verdict | Evidence |",
         "|---|---|---|",

@@ -14,7 +14,7 @@ make check                 # everything green before you start
 1. **Every module has a `CARD:` first docstring line and a test twin** in `tests/`
    (`src/forge_audit/x.py` → `tests/test_x.py`), with acceptance *and* refusal cases.
 2. **The outside world is a seam, faked in tests.** The subprocess runner
-   (`engine.Runner`) and the GitHub probe (`github.RepoProbe`) are injectable — tests
+   (`engine.Runner`) and the GitHub probe (`github.RepoProbe`) are injectable - tests
    never touch the network or a real tool. CI runs with no token.
 3. **No claim without correspondence.** A gate whose tool is absent reads
    `not_configured`; a verdict quotes its evidence. Never fake a pass.
@@ -42,7 +42,7 @@ Work on a branch → PR → CI green → merge. Never merge a red PR.
 ## Onboarding checklist
 
 - [ ] Clone, set up, and get `make check` green
-- [ ] `forge-audit --path . --format md` — read your own repo's scorecard
-- [ ] `make dogfood` — audit codeforge and read the verdict
+- [ ] `forge-audit --path . --format md` - read your own repo's scorecard
+- [ ] `make dogfood` - audit codeforge and read the verdict
 - [ ] Read one module + its twin end to end (`scorecard.py` is a good start)
 - [ ] Make a tiny docs PR before a code PR
