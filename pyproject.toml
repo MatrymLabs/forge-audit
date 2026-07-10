@@ -13,6 +13,7 @@ dev = [
     "pytest-cov",
     "pip-audit",
     "bandit[toml]",
+    "detect-secrets",
 ]
 
 [project.scripts]

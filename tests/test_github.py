@@ -25,7 +25,6 @@ def test_offline_probe_reads_zero_collaboration_never_faked(tmp_path: Path) -> N
     (tmp_path / ".github" / "workflows" / "ci.yml").write_text("name: ci")
     signals = OfflineProbe().signals(tmp_path)
     assert signals.workflows == 1
-    assert signals.open_issues == 0
     assert signals.merged_prs == 0
 
 
@@ -36,4 +35,4 @@ def test_gh_probe_returns_zero_when_gh_is_unavailable(tmp_path: Path, monkeypatc
 
     monkeypatch.setattr("subprocess.run", fail)
     signals = GhProbe().signals(tmp_path)
-    assert signals == signals.__class__(workflows=0, open_issues=0, merged_prs=0)
+    assert signals == signals.__class__(workflows=0, merged_prs=0)

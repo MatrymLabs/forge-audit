@@ -1,4 +1,4 @@
-.PHONY: env fix lint typecheck test check coverage security audit dogfood clean
+.PHONY: env fix lint typecheck test check coverage security secrets audit dogfood clean
 
 # --- Environment: create/validate the .venv, install the tool + dev tooling ---
 env:
@@ -29,13 +29,19 @@ check: lint typecheck test
 coverage:
 	pytest --cov=forge_audit --cov-report=term-missing --cov-report=xml --cov-fail-under=85
 
-# SAST + dependency CVEs. bandit gates; audit is informational.
+# SAST + dependency CVEs + committed secrets. bandit + detect-secrets gate; audit informs.
 security:
 	bandit -c pyproject.toml -r src -q
 	pip-audit --skip-editable
+	@git ls-files | xargs detect-secrets-hook --baseline .secrets.baseline
 
 audit:
 	pip-audit --skip-editable
+
+# --- Secret scan: fail on any tracked secret not in the audited baseline.
+# Regenerate after auditing: detect-secrets scan --exclude-files '\.venv/' > .secrets.baseline ---
+secrets:
+	@git ls-files | xargs detect-secrets-hook --baseline .secrets.baseline
 
 # --- Dogfood: audit the flagship next door and print its scorecard ---
 dogfood:

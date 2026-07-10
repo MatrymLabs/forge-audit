@@ -34,6 +34,9 @@ jobs:
       - name: Static security scan
         run: bandit -c pyproject.toml -r src -q
 
+      - name: Secret scan
+        run: make secrets
+
       - name: Dependency CVE audit
         run: make audit
         continue-on-error: true
