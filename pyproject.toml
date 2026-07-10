@@ -14,6 +14,7 @@ dev = [
     "pip-audit",
     "bandit[toml]",
     "detect-secrets",
+    "cyclonedx-bom",
 ]
 
 [project.scripts]

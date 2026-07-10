@@ -1,4 +1,4 @@
-.PHONY: env fix lint typecheck test check coverage security secrets audit dogfood clean
+.PHONY: env fix lint typecheck test check coverage security secrets sbom audit dogfood clean
 
 # --- Environment: create/validate the .venv, install the tool + dev tooling ---
 env:
@@ -38,6 +38,13 @@ security:
 audit:
 	pip-audit --skip-editable
 
+# --- SBOM: a CycloneDX software bill of materials (SSDF supply-chain evidence).
+# Generated from the installed environment; the output is git-ignored (reproducible
+# from the recorded commit), while CI keeps it as an artifact. ---
+sbom:
+	cyclonedx-py environment -o sbom.cdx.json
+	@echo "✓ SBOM -> sbom.cdx.json"
+
 # --- Secret scan: fail on any tracked secret not in the audited baseline.
 # Regenerate after auditing: detect-secrets scan --exclude-files '\.venv/' > .secrets.baseline ---
 secrets:
@@ -48,5 +55,5 @@ dogfood:
 	forge-audit --path ../codeforge --stage intermediate --json
 
 clean:
-	rm -rf .pytest_cache .ruff_cache .mypy_cache coverage.xml htmlcov *.egg-info src/*.egg-info
+	rm -rf .pytest_cache .ruff_cache .mypy_cache coverage.xml htmlcov sbom.cdx.json *.egg-info src/*.egg-info
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
