@@ -23,12 +23,15 @@ pip install -e ".[dev]"          # or: make env
 ## Run
 
 ```bash
-forge-audit --path ../codeforge --stage intermediate --json
-forge-audit --path .                      # human-readable summary of this repo
-forge-audit --path ../codeforge --online  # add live issue/PR signals via the `gh` CLI
+forge-audit --path .                            # human-readable summary (default)
+forge-audit --path ../codeforge --format json   # machine-readable scorecard
+forge-audit --path ../codeforge --format md      # a Markdown table for a README Evaluation section
+forge-audit --path ../codeforge --online         # add live issue/PR signals via the `gh` CLI
 ```
 
-Exit code carries the verdict so CI can gate on it: `0` pass · `1` watchlist · `2` fail.
+`--format {human,json,md}` picks the output shape (`--json` is a shortcut for `--format
+json`). Exit code carries the verdict so CI can gate on it: `0` pass · `1` watchlist ·
+`2` fail.
 
 ## What it grades
 

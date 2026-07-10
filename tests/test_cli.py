@@ -34,3 +34,43 @@ def test_the_parser_rejects_an_unknown_stage(capsys) -> None:
 
     with pytest.raises(SystemExit):
         build_parser().parse_args(["--stage", "nope"])
+
+
+def test_markdown_format_emits_a_readme_ready_table(tmp_path, capsys) -> None:
+    (tmp_path / ".github" / "workflows").mkdir(parents=True)
+    (tmp_path / ".github" / "workflows" / "ci.yml").write_text("name: ci")
+    main(["--path", str(tmp_path), "--format", "md"])
+    out = capsys.readouterr().out
+    assert "| Dimension | Verdict | Evidence |" in out
+    assert "|---|---|---|" in out
+    assert "| **overall** |" in out
+    assert "role signals:" in out
+
+
+def test_json_shortcut_still_selects_json_format(tmp_path, capsys) -> None:
+    main(["--path", str(tmp_path), "--json"])
+    payload = json.loads(capsys.readouterr().out)  # the shortcut must still emit valid JSON
+    assert "verdict" in payload
+
+
+def test_default_format_is_the_human_summary(tmp_path, capsys) -> None:
+    main(["--path", str(tmp_path)])
+    assert "VERDICT:" in capsys.readouterr().out
+
+
+def test_render_markdown_glyphs_match_verdicts() -> None:
+    from forge_audit.cli import render_markdown
+    from forge_audit.scorecard import Dimension, Scorecard
+
+    card = Scorecard(
+        repo="demo",
+        stage="entry",
+        verdict="fail",
+        dimensions=[Dimension("lint", "pass", "clean"), Dimension("ci", "fail", "no CI")],
+        role_signals=[],
+        top_gaps=["ci: no CI"],
+    )
+    md = render_markdown(card)
+    assert "| lint | ✅ pass | clean |" in md
+    assert "| ci | ❌ fail | no CI |" in md
+    assert "| **overall** | **❌ fail** | role signals: (none proven) |" in md
