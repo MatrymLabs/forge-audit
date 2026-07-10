@@ -1,5 +1,9 @@
 # forge-audit
 
+[![CI](https://github.com/MatrymLabs/forge-audit/actions/workflows/ci.yml/badge.svg)](https://github.com/MatrymLabs/forge-audit/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.13-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 **The proof-tool.** A portfolio makes a claim — *this engineer uses AI as a force
 multiplier, wrapped in automated evidence, quality gates, and delivery mechanics.*
 `forge-audit` **proves** that claim instead of asserting it: point it at a repository and
@@ -63,6 +67,21 @@ real tool**:
 
 `scorecard.build_scorecard` is the `EvidenceLedger`: it weighs the readings and signals
 against the stage thresholds and forges the `Scorecard`.
+
+## It audits itself
+
+The tool holds itself to its own rule. Its CI runs the dogfood step, and you can too:
+
+```
+$ forge-audit --path . --stage entry
+  [pass     ] lint / typecheck / tests (94% ≥ 70%) / security / dependencies / ci
+  [watchlist] collaboration: no merged-PR loop observed
+VERDICT: WATCHLIST   (roles: testing · security · backend · devops)
+```
+
+The lone `watchlist` is honest: this repo has no merged-PR loop yet, so the collaboration
+signal is correctly withheld — the tool refuses to claim evidence it doesn't have. That is
+the whole point: **no claim without correspondence,** even about itself.
 
 ## Test
 
