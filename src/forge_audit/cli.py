@@ -1,10 +1,11 @@
 """CARD: cli -- the forge-audit command: audit a repo, emit a scorecard.
 
-    forge-audit --path ../codeforge --stage entry --json
+    forge-audit --path ../codeforge --stage entry --format md
 
-Prints a machine-readable JSON scorecard (for a README Evaluation section or another
-tool) or a human-readable summary. Exit code carries the verdict so CI can gate on it:
-0 pass · 1 watchlist · 2 fail.
+Emits the scorecard in one of three shapes: `human` (a terminal summary), `json` (for
+machines / another tool), or `md` (a Markdown table ready to paste into a README
+Evaluation section, faithful to the JSON by construction). Exit code carries the verdict
+so CI can gate on it: 0 pass · 1 watchlist · 2 fail.
 """
 
 from __future__ import annotations
@@ -18,6 +19,9 @@ from forge_audit.github import GhProbe, OfflineProbe
 from forge_audit.scorecard import FAIL_V, PASS_V, STAGES, Scorecard, build_scorecard
 
 _EXIT = {PASS_V: 0, "watchlist": 1, FAIL_V: 2}
+
+# Verdict glyphs for the Markdown view -- a scorecard reads at a glance in a README.
+_GLYPH = {PASS_V: "✅", "watchlist": "🔶", FAIL_V: "❌"}
 
 
 def _render_human(card: Scorecard) -> str:
@@ -37,6 +41,37 @@ def _render_human(card: Scorecard) -> str:
     return "\n".join(lines)
 
 
+def _glyph(verdict: str) -> str:
+    """A verdict rendered as `<glyph> <word>` for the Markdown table."""
+    return f"{_GLYPH.get(verdict, '')} {verdict}".strip()
+
+
+def render_markdown(card: Scorecard) -> str:
+    """The scorecard as a Markdown table, ready to paste into a README Evaluation section.
+
+    Built straight from the same Scorecard the JSON serializes, so the embedded table can
+    never quietly drift from the machine verdict -- the drift this tool exists to prevent.
+    """
+    roles = " · ".join(card.role_signals) or "(none proven)"
+    lines = [
+        f"### forge-audit — {card.repo} ({card.stage} stage)",
+        "",
+        "| Dimension | Verdict | Evidence |",
+        "|---|---|---|",
+    ]
+    for d in card.dimensions:
+        lines.append(f"| {d.name} | {_glyph(d.verdict)} | {d.evidence} |")
+    lines.append(f"| **overall** | **{_glyph(card.verdict)}** | role signals: {roles} |")
+    return "\n".join(lines)
+
+
+_RENDERERS = {
+    "human": _render_human,
+    "json": lambda card: json.dumps(card.to_dict(), indent=2, ensure_ascii=False),
+    "md": render_markdown,
+}
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="forge-audit", description="Audit a repo; emit a scorecard."
@@ -45,7 +80,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--stage", default="entry", choices=sorted(STAGES), help="grading stage (default: entry)"
     )
-    parser.add_argument("--json", action="store_true", help="emit the scorecard as JSON")
+    parser.add_argument(
+        "--format",
+        choices=sorted(_RENDERERS),
+        default="human",
+        help="output shape: human (default) · json · md (README-ready table)",
+    )
+    # Back-compat shortcut: `--json` is `--format json` (CI dogfood and older calls use it).
+    parser.add_argument(
+        "--json",
+        action="store_const",
+        const="json",
+        dest="format",
+        help="shortcut for --format json",
+    )
     parser.add_argument(
         "--online", action="store_true", help="use the live `gh` probe for issue/PR signals"
     )
@@ -60,10 +108,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     probe = GhProbe() if args.online else OfflineProbe()
     card = build_scorecard(path, stage=args.stage, probe=probe)
-    if args.json:
-        print(json.dumps(card.to_dict(), indent=2, ensure_ascii=False))
-    else:
-        print(_render_human(card))
+    print(_RENDERERS[args.format](card))
     return _EXIT[card.verdict]
 
 
