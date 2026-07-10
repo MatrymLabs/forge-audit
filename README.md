@@ -73,14 +73,25 @@ against the stage thresholds and forges the `Scorecard`.
 
 ## It audits itself
 
-The tool holds itself to its own rule. Its CI runs the dogfood step, and you can too:
+The tool holds itself to its own rule. Its CI runs the dogfood step; the table below is
+its verbatim `--format md` output — reproduce it yourself:
 
 ```
 $ forge-audit --path . --stage entry --online --format md
-| lint | typecheck | tests (94% ≥ 70%) | security | dependencies | ci | collaboration |
-|  ✅  |    ✅     |        ✅         |   ✅     |      ✅       | ✅ |      ✅       |
-overall: ✅ pass   (roles: testing · security · backend · devops · collaboration)
 ```
+
+### forge-audit — forge-audit (entry stage)
+
+| Dimension | Verdict | Evidence |
+|---|---|---|
+| lint | ✅ pass | clean |
+| typecheck | ✅ pass | clean |
+| tests | ✅ pass | green suite, coverage 94% ≥ 70% |
+| security | ✅ pass | clean |
+| dependencies | ✅ pass | clean |
+| ci | ✅ pass | 2 CI workflow(s) |
+| collaboration | ✅ pass | 1 merged PR(s) |
+| **overall** | **✅ pass** | role signals: testing · security · backend · devops · collaboration |
 
 The collaboration signal is honest by construction: it passes only because this repo has
 a real issue → PR → merge loop ([#3](https://github.com/MatrymLabs/forge-audit/issues/3)
