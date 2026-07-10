@@ -49,4 +49,4 @@ def green(coverage: int = 90) -> dict[str, CommandResult]:
 
 @pytest.fixture
 def signals_all_green() -> RepoSignals:
-    return RepoSignals(workflows=3, open_issues=1, merged_prs=4)
+    return RepoSignals(workflows=3, merged_prs=4)

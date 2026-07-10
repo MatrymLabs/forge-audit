@@ -94,7 +94,8 @@ even about itself.
 ```bash
 make check       # ruff + mypy + pytest
 make coverage    # coverage gate (≥ 85%)
-make security    # bandit + pip-audit
+make security    # bandit + pip-audit + detect-secrets
+make secrets     # detect-secrets, against the baseline
 make dogfood     # audit the codeforge flagship next door
 ```
 

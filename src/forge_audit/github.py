@@ -21,7 +21,6 @@ class RepoSignals:
     """The collaboration facts an audit reads from the forge (GitHub): closed loops."""
 
     workflows: int  # CI workflow files present
-    open_issues: int
     merged_prs: int
 
 
@@ -50,13 +49,8 @@ class GhProbe:
     def signals(self, path: Path) -> RepoSignals:
         return RepoSignals(
             workflows=count_workflows(path),
-            open_issues=self._gh_count(path, "issue"),
             merged_prs=self._gh_merged_prs(path),
         )
-
-    def _gh_count(self, path: Path, kind: str) -> int:
-        out = self._gh(path, [kind, "list", "--state", "open", "--json", "number"])
-        return len(out) if out is not None else 0
 
     def _gh_merged_prs(self, path: Path) -> int:
         out = self._gh(path, ["pr", "list", "--state", "merged", "--json", "number"])
@@ -83,4 +77,4 @@ class OfflineProbe:
     """
 
     def signals(self, path: Path) -> RepoSignals:
-        return RepoSignals(workflows=count_workflows(path), open_issues=0, merged_prs=0)
+        return RepoSignals(workflows=count_workflows(path), merged_prs=0)

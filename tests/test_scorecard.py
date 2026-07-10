@@ -50,14 +50,14 @@ def test_a_red_gate_forces_an_overall_fail(signals_all_green) -> None:
 
 
 def test_zero_workflows_fails_the_ci_dimension(signals_all_green) -> None:
-    no_ci = RepoSignals(workflows=0, open_issues=0, merged_prs=1)
+    no_ci = RepoSignals(workflows=0, merged_prs=1)
     card = _card(green(90), no_ci)
     assert next(d for d in card.dimensions if d.name == "ci").verdict == FAIL_V
     assert card.verdict == FAIL_V
 
 
 def test_no_merged_prs_is_a_watchlist_collaboration_signal(signals_all_green) -> None:
-    solo = RepoSignals(workflows=3, open_issues=0, merged_prs=0)
+    solo = RepoSignals(workflows=3, merged_prs=0)
     card = _card(green(90), solo)
     collab = next(d for d in card.dimensions if d.name == "collaboration")
     assert collab.verdict == WATCHLIST
