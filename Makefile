@@ -6,7 +6,7 @@ env:
 	.venv/bin/pip install -q --upgrade pip
 	.venv/bin/pip install -q -e ".[dev]"
 	@.venv/bin/python -c "import sys; assert sys.version_info[:2] >= (3, 13), 'need Python >= 3.13'"
-	@echo "✓ .venv ready — activate with: source .venv/bin/activate"
+	@echo "✓ .venv ready - activate with: source .venv/bin/activate"
 
 # --- Mutators: run while working ---
 fix:
