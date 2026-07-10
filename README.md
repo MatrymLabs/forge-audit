@@ -96,6 +96,7 @@ make check       # ruff + mypy + pytest
 make coverage    # coverage gate (≥ 85%)
 make security    # bandit + pip-audit + detect-secrets
 make secrets     # detect-secrets, against the baseline
+make sbom        # CycloneDX software bill of materials
 make dogfood     # audit the codeforge flagship next door
 ```
 

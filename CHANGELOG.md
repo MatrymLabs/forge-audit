@@ -9,6 +9,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - Community-health docs — `CONTRIBUTING.md`, `SECURITY.md`, this `CHANGELOG.md`.
 - `make secrets` — detect-secrets scan against a committed `.secrets.baseline`, run in CI.
+- CodeQL SAST (`.github/workflows/codeql.yml`, Python + workflows) and `make sbom`
+  (CycloneDX bill of materials, generated in CI and kept as an artifact).
 
 ### Changed
 - Evidence-set parity with the codeforge flagship (security + docs).
