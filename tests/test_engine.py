@@ -72,6 +72,20 @@ def test_a_repos_own_venv_toolchain_is_preferred(tmp_path: Path) -> None:
     assert resolved == str(venv_bin / "ruff")
 
 
+def test_typecheck_resolves_package_bases_so_duplicate_conftest_is_not_a_false_fail() -> None:
+    # Regression pin: `mypy .` over a repo with two `conftest.py` (root + e2e/) raises
+    # "Duplicate module" and reads *fail* -- a resolution collision, not a type error. The
+    # package-base flags let mypy resolve them as distinct modules and return the true
+    # verdict. Dropping either flag reintroduces the false negative this tool exists to catch.
+    from forge_audit.engine import _gate_specs
+
+    typecheck = next(spec for spec in _gate_specs(Path(".")) if spec[0] == "typecheck")
+    _, tool, args = typecheck
+    assert tool == "mypy"
+    assert "--namespace-packages" in args
+    assert "--explicit-package-bases" in args
+
+
 def test_bandit_honors_the_targets_own_config_and_excludes_the_venv(tmp_path: Path) -> None:
     from forge_audit.engine import _bandit_args
 
