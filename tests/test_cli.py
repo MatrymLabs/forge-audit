@@ -58,6 +58,40 @@ def test_default_format_is_the_human_summary(tmp_path, capsys) -> None:
     assert "VERDICT:" in capsys.readouterr().out
 
 
+def test_fleet_flag_emits_a_combined_json_scorecard(tmp_path, capsys) -> None:
+    for name in ("alpha", "beta"):
+        (tmp_path / name / ".github" / "workflows").mkdir(parents=True)
+        (tmp_path / name / ".github" / "workflows" / "ci.yml").write_text("name: ci")
+    main(["--fleet", str(tmp_path / "alpha"), str(tmp_path / "beta"), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["repo_count"] == 2
+    assert {c["repo"] for c in payload["repos"]} == {"alpha", "beta"}
+    assert "verdict" in payload
+
+
+def test_fleet_flag_rejects_a_missing_path(capsys) -> None:
+    code = main(["--fleet", "/no/such/repo/xyz"])
+    assert code == 2
+    assert "not a directory" in capsys.readouterr().err
+
+
+def test_fleet_human_is_the_default_and_shows_a_fleet_verdict(tmp_path, capsys) -> None:
+    (tmp_path / "alpha").mkdir()
+    (tmp_path / "beta").mkdir()
+    main(["--fleet", str(tmp_path / "alpha"), str(tmp_path / "beta")])
+    out = capsys.readouterr().out
+    assert "forge-audit fleet - 2 repo(s)" in out
+    assert "FLEET VERDICT:" in out
+
+
+def test_fleet_markdown_shows_a_rolled_up_fleet_row(tmp_path, capsys) -> None:
+    (tmp_path / "alpha").mkdir()
+    main(["--fleet", str(tmp_path / "alpha"), "--format", "md"])
+    out = capsys.readouterr().out
+    assert "| Repo | Verdict | Role signals | Top gap |" in out
+    assert "| **fleet** |" in out
+
+
 def test_render_markdown_glyphs_match_verdicts() -> None:
     from forge_audit.cli import render_markdown
     from forge_audit.scorecard import Dimension, Scorecard

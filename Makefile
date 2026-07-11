@@ -1,4 +1,4 @@
-.PHONY: env fix lint typecheck test check coverage security secrets sbom audit dogfood clean
+.PHONY: env fix lint typecheck test check coverage security secrets sbom audit dogfood dogfood-fleet clean
 
 # --- Environment: create/validate the .venv, install the tool + dev tooling ---
 env:
@@ -53,6 +53,9 @@ secrets:
 # --- Dogfood: audit the flagship next door and print its scorecard ---
 dogfood:
 	forge-audit --path ../codeforge --stage intermediate --json
+
+dogfood-fleet:
+	forge-audit --fleet ../codeforge ../ai-log-triage ../federal-guidance-library --stage intermediate --format md
 
 clean:
 	rm -rf .pytest_cache .ruff_cache .mypy_cache coverage.xml htmlcov sbom.cdx.json *.egg-info src/*.egg-info

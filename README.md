@@ -33,6 +33,23 @@ forge-audit --path ../codeforge --online         # add live issue/PR signals via
 json`). Exit code carries the verdict so CI can gate on it: `0` pass · `1` watchlist ·
 `2` fail.
 
+### Fleet mode - one scorecard for many repos
+
+Point it at several repos at once and it forges a single **fleet scorecard**: every repo
+graded, then rolled up into one verdict (worst-wins, the same rule the single card uses
+across its dimensions). This is the shared, multi-consumer surface - platform tooling, not
+a one-repo script.
+
+```bash
+forge-audit --fleet ../codeforge ../ai-log-triage ../federal-guidance-library
+forge-audit --fleet ../codeforge ../ai-log-triage --stage advanced --json   # machine-readable
+forge-audit --fleet ../codeforge ../ai-log-triage --format md               # a portfolio-index table
+```
+
+`--fleet` takes one or more paths and overrides `--path`; `--stage`, `--format`, and
+`--online` apply to every repo in the run. An empty fleet or a path that is not a directory
+refuses the run rather than grading a partial, misleading fleet.
+
 ## What it grades
 
 | Dimension | Evidence | Passes when |
