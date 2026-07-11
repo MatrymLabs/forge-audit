@@ -15,6 +15,7 @@ import json
 import sys
 from pathlib import Path
 
+from forge_audit.engine import Runner, subprocess_runner
 from forge_audit.fleet import FleetScorecard, build_fleet
 from forge_audit.github import GhProbe, OfflineProbe
 from forge_audit.scorecard import FAIL_V, PASS_V, STAGES, Scorecard, build_scorecard
@@ -148,13 +149,21 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, runner: Runner = subprocess_runner) -> int:
+    """Audit a repo (or a fleet) and emit a scorecard.
+
+    `runner` is the gate-execution seam (defaults to the real subprocess runner): tests
+    inject a fake so the CLI is graded offline, never shelling out to real tools -- the
+    same seam `build_scorecard`/`build_fleet` already expose to the engine and scorecard.
+    """
     args = build_parser().parse_args(argv)
     probe = GhProbe() if args.online else OfflineProbe()
 
     if args.fleet:
         try:
-            fleet = build_fleet([Path(p) for p in args.fleet], stage=args.stage, probe=probe)
+            fleet = build_fleet(
+                [Path(p) for p in args.fleet], stage=args.stage, runner=runner, probe=probe
+            )
         except ValueError as err:
             print(f"forge-audit: {err}", file=sys.stderr)
             return 2
@@ -165,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
     if not path.is_dir():
         print(f"forge-audit: not a directory: {path}", file=sys.stderr)
         return 2
-    card = build_scorecard(path, stage=args.stage, probe=probe)
+    card = build_scorecard(path, stage=args.stage, runner=runner, probe=probe)
     print(_RENDERERS[args.format](card))
     return _EXIT[card.verdict]
 
