@@ -18,6 +18,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -95,18 +96,38 @@ def _bandit_args(path: Path) -> list[str]:
     return args
 
 
+def _mypy_args(path: Path) -> list[str]:
+    """mypy invocation that HONORS the target's own scope instead of imposing ours.
+
+    A single hardcoded `mypy .` mis-audits real repos and grades type-clean ones red -- the
+    exact false-correspondence this tool exists to catch:
+      - a src-layout repo installed editable resolves its own first-party packages to the
+        installed dist (no `py.typed`) and reads a wall of spurious `import-untyped`;
+      - `mypy .` pulls in dirs a repo's real gate excludes (e.g. an `e2e/` with a second
+        `conftest.py`), raising a "Duplicate module" collision that is not a type error.
+
+    So when the target declares its scope in `[tool.mypy] files`, run mypy config-driven
+    (no positional args): mypy reads that scope and the repo's own flags, and we grade it
+    exactly as its own gate does. Only when no scope is declared do we fall back to a plain
+    best-effort `mypy .`.
+    """
+    pyproject = path / "pyproject.toml"
+    if pyproject.is_file():
+        try:
+            config = tomllib.loads(pyproject.read_text(encoding="utf-8", errors="ignore"))
+        except tomllib.TOMLDecodeError:
+            config = {}
+        if config.get("tool", {}).get("mypy", {}).get("files"):
+            return []  # no positional args -> mypy honors `files` (and flags) from the config
+    return ["."]
+
+
 # --- The gates, in cheapest-first order (tests handled separately for coverage) --
 # Each entry: (gate name, tool, args-after-the-tool).
 def _gate_specs(path: Path) -> tuple[tuple[str, str, list[str]], ...]:
     return (
         ("lint", "ruff", ["check", "."]),
-        # `--namespace-packages --explicit-package-bases`: without them, `mypy .` over a
-        # repo with duplicate top-level basenames (e.g. two `conftest.py`, one at the root
-        # and one under `e2e/`) raises "Duplicate module named ..." and reads *fail* -- a
-        # module-resolution collision, not a type error. That is the exact false-negative
-        # this tool exists to catch: grading a genuinely type-clean repo red. The flags let
-        # mypy resolve those files as distinct packages and return the repo's true verdict.
-        ("typecheck", "mypy", [".", "--namespace-packages", "--explicit-package-bases"]),
+        ("typecheck", "mypy", _mypy_args(path)),
         ("security", "bandit", _bandit_args(path)),
         ("dependencies", "pip-audit", ["--skip-editable"]),
     )

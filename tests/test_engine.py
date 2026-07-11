@@ -72,18 +72,37 @@ def test_a_repos_own_venv_toolchain_is_preferred(tmp_path: Path) -> None:
     assert resolved == str(venv_bin / "ruff")
 
 
-def test_typecheck_resolves_package_bases_so_duplicate_conftest_is_not_a_false_fail() -> None:
-    # Regression pin: `mypy .` over a repo with two `conftest.py` (root + e2e/) raises
-    # "Duplicate module" and reads *fail* -- a resolution collision, not a type error. The
-    # package-base flags let mypy resolve them as distinct modules and return the true
-    # verdict. Dropping either flag reintroduces the false negative this tool exists to catch.
-    from forge_audit.engine import _gate_specs
+def test_typecheck_honors_the_targets_declared_mypy_scope(tmp_path: Path) -> None:
+    # A repo that declares `[tool.mypy] files` is audited config-driven (no positional
+    # args), so mypy honors its scope and flags -- graded exactly as its own gate runs.
+    # Hardcoding `mypy .` instead false-fails src-layout installs and dirs the repo excludes.
+    from forge_audit.engine import _gate_specs, _mypy_args
 
-    typecheck = next(spec for spec in _gate_specs(Path(".")) if spec[0] == "typecheck")
-    _, tool, args = typecheck
-    assert tool == "mypy"
-    assert "--namespace-packages" in args
-    assert "--explicit-package-bases" in args
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.mypy]\nfiles = ["src", "tests"]\n', encoding="utf-8"
+    )
+    assert _mypy_args(tmp_path) == []
+    typecheck = next(spec for spec in _gate_specs(tmp_path) if spec[0] == "typecheck")
+    assert typecheck[1] == "mypy"
+    assert typecheck[2] == []  # config-driven: no imposed scope or flags
+
+
+def test_typecheck_falls_back_to_dot_when_no_scope_is_declared(tmp_path: Path) -> None:
+    from forge_audit.engine import _mypy_args
+
+    # No pyproject at all -> best-effort whole-tree scan.
+    assert _mypy_args(tmp_path) == ["."]
+    # A pyproject with [tool.mypy] but no `files` -> still the fallback.
+    (tmp_path / "pyproject.toml").write_text("[tool.mypy]\nstrict = true\n", encoding="utf-8")
+    assert _mypy_args(tmp_path) == ["."]
+
+
+def test_typecheck_tolerates_a_malformed_pyproject(tmp_path: Path) -> None:
+    from forge_audit.engine import _mypy_args
+
+    # A broken TOML must not crash the audit -- fall back, don't raise.
+    (tmp_path / "pyproject.toml").write_text("[tool.mypy\nfiles = broken", encoding="utf-8")
+    assert _mypy_args(tmp_path) == ["."]
 
 
 def test_bandit_honors_the_targets_own_config_and_excludes_the_venv(tmp_path: Path) -> None:
