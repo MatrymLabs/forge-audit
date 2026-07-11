@@ -15,6 +15,7 @@ import json
 import sys
 from pathlib import Path
 
+from forge_audit.fleet import FleetScorecard, build_fleet
 from forge_audit.github import GhProbe, OfflineProbe
 from forge_audit.scorecard import FAIL_V, PASS_V, STAGES, Scorecard, build_scorecard
 
@@ -72,6 +73,47 @@ _RENDERERS = {
 }
 
 
+def _fleet_row(card: Scorecard) -> str:
+    """One repo's line in the fleet Markdown table: verdict, roles, and its first gap."""
+    roles = " · ".join(card.role_signals) or "(none proven)"
+    top_gap = card.top_gaps[0] if card.top_gaps else "(none)"
+    return f"| {card.repo} | {_glyph(card.verdict)} | {roles} | {top_gap} |"
+
+
+def _render_fleet_human(fleet: FleetScorecard) -> str:
+    lines = [f"forge-audit fleet - {len(fleet.repos)} repo(s) ({fleet.stage} stage)", ""]
+    for card in fleet.repos:
+        roles = ", ".join(card.role_signals) or "(none proven)"
+        lines.append(f"  [{card.verdict:9}] {card.repo}: roles={roles}; gaps={len(card.top_gaps)}")
+    lines.append("")
+    lines.append(f"FLEET VERDICT: {fleet.verdict.upper()}")
+    return "\n".join(lines)
+
+
+def render_fleet_markdown(fleet: FleetScorecard) -> str:
+    """The fleet as one Markdown table -- the shared surface, ready for a portfolio index.
+
+    One row per repo plus a rolled-up **fleet** row, built from the same FleetScorecard the
+    JSON serializes, so the pasted table can never drift from the machine verdict.
+    """
+    lines = [
+        f"### forge-audit fleet - {len(fleet.repos)} repo(s) ({fleet.stage} stage)",
+        "",
+        "| Repo | Verdict | Role signals | Top gap |",
+        "|---|---|---|---|",
+    ]
+    lines += [_fleet_row(card) for card in fleet.repos]
+    lines.append(f"| **fleet** | **{_glyph(fleet.verdict)}** | {len(fleet.repos)} repo(s) | |")
+    return "\n".join(lines)
+
+
+_FLEET_RENDERERS = {
+    "human": _render_fleet_human,
+    "json": lambda fleet: json.dumps(fleet.to_dict(), indent=2, ensure_ascii=False),
+    "md": render_fleet_markdown,
+}
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="forge-audit", description="Audit a repo; emit a scorecard."
@@ -97,16 +139,32 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--online", action="store_true", help="use the live `gh` probe for issue/PR signals"
     )
+    parser.add_argument(
+        "--fleet",
+        nargs="+",
+        metavar="PATH",
+        help="audit multiple repos and emit one combined fleet scorecard (overrides --path)",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    probe = GhProbe() if args.online else OfflineProbe()
+
+    if args.fleet:
+        try:
+            fleet = build_fleet([Path(p) for p in args.fleet], stage=args.stage, probe=probe)
+        except ValueError as err:
+            print(f"forge-audit: {err}", file=sys.stderr)
+            return 2
+        print(_FLEET_RENDERERS[args.format](fleet))
+        return _EXIT[fleet.verdict]
+
     path = Path(args.path)
     if not path.is_dir():
         print(f"forge-audit: not a directory: {path}", file=sys.stderr)
         return 2
-    probe = GhProbe() if args.online else OfflineProbe()
     card = build_scorecard(path, stage=args.stage, probe=probe)
     print(_RENDERERS[args.format](card))
     return _EXIT[card.verdict]
