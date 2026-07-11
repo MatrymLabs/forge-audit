@@ -100,7 +100,13 @@ def _bandit_args(path: Path) -> list[str]:
 def _gate_specs(path: Path) -> tuple[tuple[str, str, list[str]], ...]:
     return (
         ("lint", "ruff", ["check", "."]),
-        ("typecheck", "mypy", ["."]),
+        # `--namespace-packages --explicit-package-bases`: without them, `mypy .` over a
+        # repo with duplicate top-level basenames (e.g. two `conftest.py`, one at the root
+        # and one under `e2e/`) raises "Duplicate module named ..." and reads *fail* -- a
+        # module-resolution collision, not a type error. That is the exact false-negative
+        # this tool exists to catch: grading a genuinely type-clean repo red. The flags let
+        # mypy resolve those files as distinct packages and return the repo's true verdict.
+        ("typecheck", "mypy", [".", "--namespace-packages", "--explicit-package-bases"]),
         ("security", "bandit", _bandit_args(path)),
         ("dependencies", "pip-audit", ["--skip-editable"]),
     )
