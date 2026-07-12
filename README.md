@@ -1,6 +1,7 @@
 # forge-audit
 
 [![CI](https://github.com/MatrymLabs/forge-audit/actions/workflows/ci.yml/badge.svg)](https://github.com/MatrymLabs/forge-audit/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/MatrymLabs/forge-audit/branch/main/graph/badge.svg)](https://codecov.io/gh/MatrymLabs/forge-audit)
 ![Python](https://img.shields.io/badge/python-3.13-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 

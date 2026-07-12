@@ -31,6 +31,14 @@ jobs:
       - name: Coverage gate
         run: make coverage
 
+      # Publish the coverage report so the README badge is earned, not asserted.
+      # Tokenless upload (public repo); a Codecov hiccup must never red the build.
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+
       - name: Static security scan
         run: bandit -c pyproject.toml -r src -q
 
