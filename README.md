@@ -91,32 +91,34 @@ against the stage thresholds and forges the `Scorecard`.
 
 ## It audits itself
 
-The tool holds itself to its own rule. Its CI runs the dogfood step; the table below is
-its verbatim `--format md` output - reproduce it yourself:
+The tool holds itself to its own rule. Its CI runs the dogfood step; the table below is its
+`--format md` output at the **intermediate** stage - regenerate it yourself (the volatile
+numbers stay on the live badges, so nothing here can silently drift):
 
 ```
-$ forge-audit --path . --stage entry --online --format md
+$ forge-audit --path . --stage intermediate --online --format md
 ```
 
-### forge-audit - forge-audit (entry stage)
+### forge-audit - forge-audit (intermediate stage)
 
 | Dimension | Verdict | Evidence |
 |---|---|---|
 | lint | ✅ pass | clean |
 | typecheck | ✅ pass | clean |
-| tests | ✅ pass | green suite, coverage 94% ≥ 70% |
+| tests | ✅ pass | green suite, coverage above the 80% floor (the codecov badge is the live source) |
 | security | ✅ pass | clean |
 | dependencies | ✅ pass | clean |
-| ci | ✅ pass | 2 CI workflow(s) |
-| collaboration | ✅ pass | 1 merged PR(s) |
+| ci | ✅ pass | workflow files: `ci`, `codeql` |
+| collaboration | ✅ pass | a real issue -> PR -> merge history |
 | **overall** | **✅ pass** | role signals: testing · security · backend · devops · collaboration |
 
-The collaboration signal is honest by construction: it passes only because this repo has
-a real issue → PR → merge loop ([#3](https://github.com/MatrymLabs/forge-audit/issues/3)
-→ [#4](https://github.com/MatrymLabs/forge-audit/pull/4)). Run it **without** `--online`
-and that dimension drops to `watchlist` - offline, the tool can't observe the loop, so it
-withholds the claim rather than assume it. Either way: **no claim without correspondence,**
-even about itself.
+Honest about its own age: at the **advanced** stage the tool grades itself `watchlist`, not
+`pass` - a young repo with two workflow files legitimately sits on the watchlist, and the
+tool says so rather than inflate the verdict. The collaboration signal passes only with
+`--online`, where the tool observes the real issue -> PR -> merge loop
+([#3](https://github.com/MatrymLabs/forge-audit/issues/3) -> [#4](https://github.com/MatrymLabs/forge-audit/pull/4));
+run it offline and that dimension drops to `watchlist` rather than assume the loop. Either
+way: **no claim without correspondence,** even about itself.
 
 ## Test
 
