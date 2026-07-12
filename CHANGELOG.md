@@ -6,7 +6,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-12
+
+First tagged release: the proof-tool MVP, CI-green on `main`, dogfooding itself.
+
 ### Added
+- `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1) and `ROADMAP.md`.
+- Codecov coverage upload + README badge (coverage was gated by `make coverage` but not
+  published before, so the badge is now earned rather than asserted).
 - Community-health docs - `CONTRIBUTING.md`, `SECURITY.md`, this `CHANGELOG.md`.
 - `make secrets` - detect-secrets scan against a committed `.secrets.baseline`, run in CI.
 - CodeQL SAST (`.github/workflows/codeql.yml`, Python + workflows) and `make sbom`
