@@ -31,6 +31,15 @@ def test_coverage_percent_is_parsed_from_pytest_output() -> None:
     assert reading.coverage == 73.0
 
 
+def test_branch_coverage_total_is_parsed_not_just_flat() -> None:
+    from forge_audit.engine import _parse_coverage
+
+    # Branch coverage adds Branch/BrPart columns; the TOTAL row must still parse.
+    assert _parse_coverage("TOTAL   14570   445   2244   216   96%") == 96.0
+    assert _parse_coverage("TOTAL   100   5   95%") == 95.0  # flat still works
+    assert _parse_coverage("no total line here") is None
+
+
 def test_a_nonzero_exit_is_reported_as_fail_not_swallowed() -> None:
     runner = FakeRunner({"ruff": CommandResult(1, "E501 line too long")})
     reading = run_gate("lint", "ruff", ["check", "."], HERE, runner)

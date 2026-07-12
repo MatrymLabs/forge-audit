@@ -70,7 +70,10 @@ def _resolve(tool: str, runner: Runner, path: Path) -> str | None:
     return shutil.which(tool)
 
 
-_COVERAGE_RE = re.compile(r"TOTAL\s+\d+\s+\d+\s+(\d+)%")
+# The TOTAL row has a variable column count: flat coverage is `TOTAL Stmts Miss Cover`, but BRANCH
+# coverage (the stricter kind) is `TOTAL Stmts Miss Branch BrPart Cover`. Match any number of
+# integer columns before the final percent, so a repo isn't undersold for using branch coverage.
+_COVERAGE_RE = re.compile(r"TOTAL\s+(?:\d+\s+)+(\d+)%")
 
 
 def _parse_coverage(out: str) -> float | None:
