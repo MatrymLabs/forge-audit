@@ -28,6 +28,23 @@ def test_a_fully_green_repo_earns_pass_and_role_signals(signals_all_green) -> No
     assert {"testing", "security", "backend", "devops", "collaboration"} <= set(card.role_signals)
 
 
+def test_missing_performance_evidence_is_a_watchlist_gap(signals_all_green) -> None:
+    # a repo green on every gate but carrying no benchmark artifact: an honest watchlist, not a pass
+    no_bench = RepoSignals(workflows=3, merged_prs=4, performance="")
+    card = _card(green(90), no_bench)
+    perf = next(d for d in card.dimensions if d.name == "performance")
+    assert perf.verdict == WATCHLIST
+    assert card.verdict == WATCHLIST
+    assert any("performance" in gap for gap in card.top_gaps)
+
+
+def test_a_benchmark_artifact_earns_a_performance_pass(signals_all_green) -> None:
+    card = _card(green(90), signals_all_green)  # the fixture carries a benchmarks/ artifact
+    perf = next(d for d in card.dimensions if d.name == "performance")
+    assert perf.verdict == PASS_V
+    assert "performance" in card.role_signals
+
+
 def test_coverage_below_the_stage_floor_is_watchlist_not_pass(signals_all_green) -> None:
     # 78% clears the entry floor (70) but not intermediate (80).
     entry = _card(green(78), signals_all_green, stage="entry")

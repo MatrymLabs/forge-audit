@@ -94,6 +94,15 @@ def _grade_ci(signals: RepoSignals, minimum: int) -> Dimension:
     return Dimension("ci", PASS_V, f"{n} CI workflow(s)")
 
 
+def _grade_performance(signals: RepoSignals) -> Dimension:
+    """Performance evidence: a benchmark/profiling artifact is the signal; else a watchlist note.
+    Presence-graded like ci/collaboration - an absent benchmark is a visible gap, not a failure
+    (forge-audit grades any repo, and not every good repo benchmarks)."""
+    if signals.performance:
+        return Dimension("performance", PASS_V, f"benchmark artifact: {signals.performance}")
+    return Dimension("performance", WATCHLIST, "no benchmark/profiling artifact found")
+
+
 def _grade_collaboration(signals: RepoSignals) -> Dimension:
     """The collaboration loop: at least one merged PR is the signal; else a watchlist note."""
     if signals.merged_prs > 0:
@@ -109,6 +118,7 @@ _ROLE_EVIDENCE: dict[str, tuple[str, ...]] = {
     "backend": ("typecheck", "lint"),
     "devops": ("ci",),
     "collaboration": ("collaboration",),
+    "performance": ("performance",),
 }
 
 
@@ -151,6 +161,7 @@ def build_scorecard(
         _grade_gate("dependencies", readings["dependencies"]),
         _grade_ci(signals, thresholds["workflows"]),
         _grade_collaboration(signals),
+        _grade_performance(signals),
     ]
 
     gaps = [f"{d.name}: {d.evidence}" for d in dims if d.verdict == FAIL_V]
