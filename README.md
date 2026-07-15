@@ -75,7 +75,8 @@ refuses the run rather than grading a partial, misleading fleet.
 
 The overall verdict is the worst dimension: any `fail` → **fail**; any `watchlist` →
 **watchlist**; otherwise **pass**. `role_signals` (testing · security · backend · devops ·
-collaboration) are claimed **only** when the dimensions that prove them pass.
+collaboration · performance · documentation) are claimed **only** when the dimensions that
+prove them pass.
 
 ## Architecture
 
@@ -113,7 +114,8 @@ $ forge-audit --path . --stage intermediate --online --format md
 | ci | ✅ pass | workflow files: `ci`, `codeql` |
 | collaboration | ✅ pass | a real issue -> PR -> merge history |
 | performance | ✅ pass | a `benchmarks/` directory (`make bench` times the tool's own grading overhead) |
-| **overall** | **✅ pass** | role signals: testing · security · backend · devops · collaboration · performance |
+| readme | ✅ pass | covers purpose, install, run, test |
+| **overall** | **✅ pass** | role signals: testing · security · backend · devops · collaboration · performance · documentation |
 
 Honest about its own age: at the **advanced** stage the tool grades itself `watchlist`, not
 `pass` - a young repo with two workflow files legitimately sits on the watchlist, and the
