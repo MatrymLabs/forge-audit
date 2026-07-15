@@ -111,7 +111,8 @@ $ forge-audit --path . --stage intermediate --online --format md
 | dependencies | ✅ pass | clean |
 | ci | ✅ pass | workflow files: `ci`, `codeql` |
 | collaboration | ✅ pass | a real issue -> PR -> merge history |
-| **overall** | **✅ pass** | role signals: testing · security · backend · devops · collaboration |
+| performance | ✅ pass | a `benchmarks/` directory (`make bench` times the tool's own grading overhead) |
+| **overall** | **✅ pass** | role signals: testing · security · backend · devops · collaboration · performance |
 
 Honest about its own age: at the **advanced** stage the tool grades itself `watchlist`, not
 `pass` - a young repo with two workflow files legitimately sits on the watchlist, and the
@@ -125,6 +126,7 @@ way: **no claim without correspondence,** even about itself.
 
 ```bash
 make check       # ruff + mypy + pytest
+make bench       # micro-benchmark the tool's own grading overhead (no subprocess, no network)
 make coverage    # coverage gate (≥ 85%)
 make security    # bandit + pip-audit + detect-secrets
 make secrets     # detect-secrets, against the baseline
