@@ -62,6 +62,7 @@ refuses the run rather than grading a partial, misleading fleet.
 | `dependencies` | `pip-audit` | no known CVEs |
 | `ci` | workflow files in `.github/workflows` | count ≥ the stage minimum |
 | `collaboration` | merged PRs (via the GitHub seam) | at least one closed issue→PR→merge loop |
+| `performance` | a benchmark artifact (`benchmarks/`, a `bench` Makefile target, or a `reports/` perf dir) | present (else a watchlist gap) |
 
 ### Stage thresholds (baked in - the gate is objective, not vibes)
 

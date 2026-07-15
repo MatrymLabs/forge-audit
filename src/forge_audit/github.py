@@ -10,6 +10,7 @@ needed -- so an offline audit still scores the CI dimension honestly.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,7 @@ class RepoSignals:
 
     workflows: int  # CI workflow files present
     merged_prs: int
+    performance: str = ""  # a benchmark/profiling artifact, if one is present (evidence, or "")
 
 
 class RepoProbe(Protocol):
@@ -38,6 +40,34 @@ def count_workflows(path: Path) -> int:
     return sum(1 for p in wf_dir.iterdir() if p.suffix in (".yml", ".yaml"))
 
 
+_BENCH_TARGET_RE = re.compile(r"^(bench|benchmark)s?\s*:", re.MULTILINE)
+
+
+def performance_evidence(path: Path) -> str:
+    """A benchmark/profiling artifact, read locally (no network). Returns a short evidence
+    string, or "" if none is found. Objective signals - any one of:
+      - a `benchmarks/` or `bench/` directory holding at least one file;
+      - a `bench`/`benchmark` target in the Makefile;
+      - a perf/benchmark report directory under `reports/`.
+
+    Presence, not depth: this proves the repo carries performance evidence at all, which the
+    portfolio standard calls a scored dimension. It never runs the benchmark.
+    """
+    for name in ("benchmarks", "bench"):
+        directory = path / name
+        if directory.is_dir() and any(directory.iterdir()):
+            return f"{name}/ directory"
+    makefile = path / "Makefile"
+    if makefile.is_file() and _BENCH_TARGET_RE.search(makefile.read_text(errors="ignore")):
+        return "Makefile bench target"
+    reports = path / "reports"
+    if reports.is_dir():
+        for sub in sorted(reports.iterdir()):
+            if sub.is_dir() and any(k in sub.name.lower() for k in ("perf", "bench")):
+                return f"reports/{sub.name}/"
+    return ""
+
+
 class GhProbe:
     """The production probe: workflow count from disk, issue/PR data from `gh` (network).
 
@@ -50,6 +80,7 @@ class GhProbe:
         return RepoSignals(
             workflows=count_workflows(path),
             merged_prs=self._gh_merged_prs(path),
+            performance=performance_evidence(path),
         )
 
     def _gh_merged_prs(self, path: Path) -> int:
@@ -77,4 +108,8 @@ class OfflineProbe:
     """
 
     def signals(self, path: Path) -> RepoSignals:
-        return RepoSignals(workflows=count_workflows(path), merged_prs=0)
+        return RepoSignals(
+            workflows=count_workflows(path),
+            merged_prs=0,
+            performance=performance_evidence(path),
+        )
