@@ -49,4 +49,9 @@ def green(coverage: int = 90) -> dict[str, CommandResult]:
 
 @pytest.fixture
 def signals_all_green() -> RepoSignals:
-    return RepoSignals(workflows=3, merged_prs=4, performance="benchmarks/ directory")
+    return RepoSignals(
+        workflows=3,
+        merged_prs=4,
+        performance="benchmarks/ directory",
+        readme=("purpose", "install", "run", "test"),
+    )

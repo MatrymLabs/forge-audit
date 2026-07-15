@@ -28,6 +28,32 @@ def test_a_fully_green_repo_earns_pass_and_role_signals(signals_all_green) -> No
     assert {"testing", "security", "backend", "devops", "collaboration"} <= set(card.role_signals)
 
 
+def test_an_incomplete_readme_is_a_watchlist_gap(signals_all_green) -> None:
+    # green everywhere, but the README skips install and test: an honest watchlist naming the gaps
+    thin = RepoSignals(
+        workflows=3, merged_prs=4, performance="benchmarks/", readme=("purpose", "run")
+    )
+    card = _card(green(90), thin)
+    readme = next(d for d in card.dimensions if d.name == "readme")
+    assert readme.verdict == WATCHLIST
+    assert "install" in readme.evidence and "test" in readme.evidence
+    assert card.verdict == WATCHLIST
+
+
+def test_a_missing_readme_is_a_watchlist_gap(signals_all_green) -> None:
+    none_readme = RepoSignals(workflows=3, merged_prs=4, performance="benchmarks/", readme=None)
+    card = _card(green(90), none_readme)
+    readme = next(d for d in card.dimensions if d.name == "readme")
+    assert readme.verdict == WATCHLIST and "no README" in readme.evidence
+
+
+def test_a_complete_readme_earns_a_pass_and_the_documentation_role(signals_all_green) -> None:
+    card = _card(green(90), signals_all_green)  # the fixture's README covers all four
+    readme = next(d for d in card.dimensions if d.name == "readme")
+    assert readme.verdict == PASS_V
+    assert "documentation" in card.role_signals
+
+
 def test_missing_performance_evidence_is_a_watchlist_gap(signals_all_green) -> None:
     # a repo green on every gate but carrying no benchmark artifact: an honest watchlist, not a pass
     no_bench = RepoSignals(workflows=3, merged_prs=4, performance="")

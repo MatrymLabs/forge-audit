@@ -20,7 +20,7 @@ from forge_audit.engine import (
     diagnose,
     subprocess_runner,
 )
-from forge_audit.github import OfflineProbe, RepoProbe, RepoSignals
+from forge_audit.github import README_ESSENTIALS, OfflineProbe, RepoProbe, RepoSignals
 
 # --- Verdict vocabulary ----------------------------------------------------------
 PASS_V = "pass"  # nosec B105 -- a verdict word, not a password
@@ -103,6 +103,18 @@ def _grade_performance(signals: RepoSignals) -> Dimension:
     return Dimension("performance", WATCHLIST, "no benchmark/profiling artifact found")
 
 
+def _grade_readme(signals: RepoSignals) -> Dimension:
+    """A complete README -- purpose, install, run, test -- is the portfolio standard's presentation
+    gate. Missing or incomplete is a watchlist gap, not a failure (forge-audit grades any repo)."""
+    covered = signals.readme
+    if covered is None:
+        return Dimension("readme", WATCHLIST, "no README found")
+    missing = [essential for essential in README_ESSENTIALS if essential not in covered]
+    if not missing:
+        return Dimension("readme", PASS_V, "covers purpose, install, run, test")
+    return Dimension("readme", WATCHLIST, f"README missing: {', '.join(missing)}")
+
+
 def _grade_collaboration(signals: RepoSignals) -> Dimension:
     """The collaboration loop: at least one merged PR is the signal; else a watchlist note."""
     if signals.merged_prs > 0:
@@ -119,6 +131,7 @@ _ROLE_EVIDENCE: dict[str, tuple[str, ...]] = {
     "devops": ("ci",),
     "collaboration": ("collaboration",),
     "performance": ("performance",),
+    "documentation": ("readme",),
 }
 
 
@@ -162,6 +175,7 @@ def build_scorecard(
         _grade_ci(signals, thresholds["workflows"]),
         _grade_collaboration(signals),
         _grade_performance(signals),
+        _grade_readme(signals),
     ]
 
     gaps = [f"{d.name}: {d.evidence}" for d in dims if d.verdict == FAIL_V]

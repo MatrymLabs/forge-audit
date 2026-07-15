@@ -9,6 +9,7 @@ from forge_audit.github import (
     OfflineProbe,
     count_workflows,
     performance_evidence,
+    readme_coverage,
 )
 
 
@@ -75,3 +76,43 @@ def test_the_probe_reports_performance_evidence(tmp_path: Path) -> None:
     (tmp_path / "benchmarks").mkdir()
     (tmp_path / "benchmarks" / "b.py").write_text("x = 1\n")
     assert OfflineProbe().signals(tmp_path).performance == "benchmarks/ directory"
+
+
+# --- readme coverage (a local, network-free content check) ----------------------
+
+_FULL_README = (
+    "# My Tool\n\nA tool that does a real, described thing for real users. " + "x " * 120 + "\n\n"
+    "## Install\n\n    pip install my-tool\n\n"
+    "## Usage\n\n```\nmy-tool --help\n```\n\n"
+    "## Test\n\n    pytest\n"
+)
+
+
+def test_a_complete_readme_covers_all_four_essentials(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text(_FULL_README)
+    assert readme_coverage(tmp_path) == ("purpose", "install", "run", "test")
+
+
+def test_a_stub_readme_covers_nothing(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("# Foo\nTODO\n")
+    assert readme_coverage(tmp_path) == ()
+
+
+def test_a_partial_readme_reports_only_what_it_covers(tmp_path: Path) -> None:
+    body = (
+        "A genuine description of the project. " + "detail " * 40 + "\n## Install\npip install x\n"
+    )
+    (tmp_path / "README.md").write_text(body)
+    cov = readme_coverage(tmp_path)
+    assert cov is not None
+    assert "purpose" in cov and "install" in cov
+    assert "run" not in cov and "test" not in cov
+
+
+def test_no_readme_file_is_none(tmp_path: Path) -> None:
+    assert readme_coverage(tmp_path) is None
+
+
+def test_the_probe_reports_readme_coverage(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text(_FULL_README)
+    assert OfflineProbe().signals(tmp_path).readme == ("purpose", "install", "run", "test")

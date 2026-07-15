@@ -24,6 +24,7 @@ class RepoSignals:
     workflows: int  # CI workflow files present
     merged_prs: int
     performance: str = ""  # a benchmark/profiling artifact, if one is present (evidence, or "")
+    readme: tuple[str, ...] | None = None  # README essentials covered; None if there is no README
 
 
 class RepoProbe(Protocol):
@@ -68,6 +69,47 @@ def performance_evidence(path: Path) -> str:
     return ""
 
 
+README_ESSENTIALS = ("purpose", "install", "run", "test")
+_README_NAMES = ("README.md", "README.rst", "README.txt", "README")
+
+
+def readme_coverage(path: Path) -> tuple[str, ...] | None:
+    """Which README essentials the target's README covers -- purpose, install, run, test -- read
+    locally (no network). None if there is no README at all; otherwise a tuple (possibly empty) of
+    the essentials found. The portfolio standard names a complete README a presentation gate.
+
+    Objective, content-based signals (not vibes):
+      - purpose: a real description (>= 200 non-space chars), not a stub;
+      - install: an install section or a pip/poetry/npm/uv install command;
+      - run:     a usage/run/quick-start/example section, or a fenced code block showing how;
+      - test:    a test section or a test command (pytest, make test/check, npm test, tox).
+    """
+    text = ""
+    for name in _README_NAMES:
+        candidate = path / name
+        if candidate.is_file():
+            text = candidate.read_text(errors="ignore")
+            break
+    else:
+        return None  # no README file at all
+    low = text.lower()
+    covered: list[str] = []
+    if len(text.replace(" ", "").replace("\n", "")) >= 200:
+        covered.append("purpose")
+    if any(k in low for k in ("install", "poetry add", "npm install", "uv add", "getting started")):
+        covered.append("install")
+    if "```" in text or any(
+        k in low for k in ("## usage", "## run", "quick start", "quickstart", "example", "how to")
+    ):
+        covered.append("run")
+    if any(
+        k in low
+        for k in ("pytest", "make test", "make check", "npm test", "unittest", "tox", "## test")
+    ):
+        covered.append("test")
+    return tuple(covered)
+
+
 class GhProbe:
     """The production probe: workflow count from disk, issue/PR data from `gh` (network).
 
@@ -81,6 +123,7 @@ class GhProbe:
             workflows=count_workflows(path),
             merged_prs=self._gh_merged_prs(path),
             performance=performance_evidence(path),
+            readme=readme_coverage(path),
         )
 
     def _gh_merged_prs(self, path: Path) -> int:
@@ -112,4 +155,5 @@ class OfflineProbe:
             workflows=count_workflows(path),
             merged_prs=0,
             performance=performance_evidence(path),
+            readme=readme_coverage(path),
         )
