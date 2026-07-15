@@ -26,6 +26,10 @@ test:
 
 check: lint typecheck test
 
+# Micro-benchmark forge-audit's own grading overhead (injected fakes; no subprocess, no network).
+bench:
+	python benchmarks/grading.py
+
 coverage:
 	pytest --cov=forge_audit --cov-report=term-missing --cov-report=xml --cov-fail-under=85
 
