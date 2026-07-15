@@ -63,6 +63,7 @@ refuses the run rather than grading a partial, misleading fleet.
 | `ci` | workflow files in `.github/workflows` | count ≥ the stage minimum |
 | `collaboration` | merged PRs (via the GitHub seam) | at least one closed issue→PR→merge loop |
 | `performance` | a benchmark artifact (`benchmarks/`, a `bench` Makefile target, or a `reports/` perf dir) | present (else a watchlist gap) |
+| `readme` | the README's content (purpose · install · run · test) | all four covered (else a watchlist gap naming what's missing) |
 
 ### Stage thresholds (baked in - the gate is objective, not vibes)
 
