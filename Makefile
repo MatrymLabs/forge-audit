@@ -1,7 +1,7 @@
-.PHONY: env fix lint typecheck test check coverage security secrets sbom audit dogfood dogfood-fleet clean
+.PHONY: hooks env fix lint typecheck test check coverage security secrets sbom audit dogfood dogfood-fleet clean
 
 # --- Environment: create/validate the .venv, install the tool + dev tooling ---
-env:
+env: hooks
 	python3 -m venv .venv
 	.venv/bin/pip install -q --upgrade pip
 	.venv/bin/pip install -q -e ".[dev]"
@@ -64,3 +64,7 @@ dogfood-fleet:
 clean:
 	rm -rf .pytest_cache .ruff_cache .mypy_cache coverage.xml htmlcov sbom.cdx.json *.egg-info src/*.egg-info
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
+
+hooks:
+	git config core.hooksPath scripts/hooks
+	@echo "✓ git hooks active (scripts/hooks) - commits on main are refused"
