@@ -159,6 +159,23 @@ def test_bandit_honors_the_targets_own_config_and_excludes_the_venv(tmp_path: Pa
     assert args[:2] == ["-c", "pyproject.toml"]
 
 
+def test_bandit_excludes_test_dirs_by_default_but_defers_to_a_repos_own_config(
+    tmp_path: Path,
+) -> None:
+    from forge_audit.engine import _bandit_args
+
+    # No config: test dirs are excluded -- bandit grades shipped code, not test fixtures whose
+    # pickle/subprocess/assert would fail a foreign repo on its own tests (httpx's 8 noise).
+    default_args = _bandit_args(tmp_path)
+    exclude_default = default_args[default_args.index("--exclude") + 1]
+    assert "./tests" in exclude_default and "./test" in exclude_default
+    # With [tool.bandit], the repo owns its scope -- we do NOT impose a test exclude over it.
+    (tmp_path / "pyproject.toml").write_text("[tool.bandit]\nskips = ['B101']\n")
+    args = _bandit_args(tmp_path)
+    exclude_configured = args[args.index("--exclude") + 1]
+    assert "./tests" not in exclude_configured  # honor the repo's own scope, don't override it
+
+
 # --- Foreign-repo honesty: no target env -> not_runnable, never a false fail ----------------------
 
 
