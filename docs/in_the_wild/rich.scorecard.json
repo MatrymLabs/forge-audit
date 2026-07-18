@@ -1,0 +1,68 @@
+{
+  "repo": "rich",
+  "stage": "advanced",
+  "verdict": "fail",
+  "dimensions": [
+    {
+      "name": "lint",
+      "verdict": "watchlist",
+      "evidence": "repo lints with black + isort, not ruff (not graded here)"
+    },
+    {
+      "name": "typecheck",
+      "verdict": "watchlist",
+      "evidence": "not graded here: imports unresolved (deps absent): Found 2 errors in 2 files (checked 100 source files)"
+    },
+    {
+      "name": "tests",
+      "verdict": "watchlist",
+      "evidence": "not graded here: suite not collectable (deps absent): 1 warning, 1 error in 0.89s"
+    },
+    {
+      "name": "security",
+      "verdict": "fail",
+      "evidence": "2 high, 4 medium severity issue(s)"
+    },
+    {
+      "name": "dependencies",
+      "verdict": "pass",
+      "evidence": "clean"
+    },
+    {
+      "name": "ci",
+      "verdict": "pass",
+      "evidence": "6 CI workflow(s)"
+    },
+    {
+      "name": "collaboration",
+      "verdict": "watchlist",
+      "evidence": "no merged-PR loop observed (or offline)"
+    },
+    {
+      "name": "performance",
+      "verdict": "pass",
+      "evidence": "benchmark artifact: benchmarks/ directory"
+    },
+    {
+      "name": "readme",
+      "verdict": "watchlist",
+      "evidence": "README missing: test"
+    }
+  ],
+  "role_signals": [
+    "devops",
+    "performance"
+  ],
+  "top_gaps": [
+    "security: 2 high, 4 medium severity issue(s)",
+    "lint: repo lints with black + isort, not ruff (not graded here)",
+    "typecheck: not graded here: imports unresolved (deps absent): Found 2 errors in 2 files (checked 100 source files)",
+    "tests: not graded here: suite not collectable (deps absent): 1 warning, 1 error in 0.89s",
+    "collaboration: no merged-PR loop observed (or offline)"
+  ],
+  "top_strengths": [
+    "dependencies",
+    "ci",
+    "performance"
+  ]
+}

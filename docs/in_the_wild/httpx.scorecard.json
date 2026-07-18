@@ -1,0 +1,69 @@
+{
+  "repo": "httpx",
+  "stage": "advanced",
+  "verdict": "fail",
+  "dimensions": [
+    {
+      "name": "lint",
+      "verdict": "pass",
+      "evidence": "clean"
+    },
+    {
+      "name": "typecheck",
+      "verdict": "pass",
+      "evidence": "clean"
+    },
+    {
+      "name": "tests",
+      "verdict": "pass",
+      "evidence": "green suite, coverage 100% ≥ 85%"
+    },
+    {
+      "name": "security",
+      "verdict": "fail",
+      "evidence": "1 high severity issue(s)"
+    },
+    {
+      "name": "dependencies",
+      "verdict": "pass",
+      "evidence": "clean"
+    },
+    {
+      "name": "ci",
+      "verdict": "watchlist",
+      "evidence": "2 workflow(s) < 3 for this stage"
+    },
+    {
+      "name": "collaboration",
+      "verdict": "watchlist",
+      "evidence": "no merged-PR loop observed (or offline)"
+    },
+    {
+      "name": "performance",
+      "verdict": "watchlist",
+      "evidence": "no benchmark/profiling artifact found"
+    },
+    {
+      "name": "readme",
+      "verdict": "watchlist",
+      "evidence": "README missing: test"
+    }
+  ],
+  "role_signals": [
+    "testing",
+    "backend"
+  ],
+  "top_gaps": [
+    "security: 1 high severity issue(s)",
+    "ci: 2 workflow(s) < 3 for this stage",
+    "collaboration: no merged-PR loop observed (or offline)",
+    "performance: no benchmark/profiling artifact found",
+    "readme: README missing: test"
+  ],
+  "top_strengths": [
+    "lint",
+    "typecheck",
+    "tests",
+    "dependencies"
+  ]
+}
