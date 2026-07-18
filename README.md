@@ -83,19 +83,26 @@ prove them pass.
 forge-audit grades by **running** the gates, so a fair grade needs the target's **dev environment**
 installed — its own `.venv` with its dependencies (which is exactly what the repo's CI reproduces).
 Point it at a bare clone with no deps and the deps-dependent gates can't truly run. Rather than
-**defame a project whose own CI is green**, forge-audit refuses to call that a failure:
+**defame a project whose own CI is green**, forge-audit refuses to call that a failure, and it grades
+each repo by **its own toolchain**, never ours:
 
-- **tests**: when `pytest` can't import/collect the suite (a `ModuleNotFoundError` / collection
-  error), the dimension reads `watchlist — not graded here: suite not collectable (deps absent)`,
-  never `fail`.
-- **typecheck**: when `mypy` reports it can't resolve a module's implementation or stubs, same
-  honest `not graded here`. (A missing-dep *cascade* that surfaces only as `untyped-decorator` /
-  `unused-ignore` is indistinguishable from a real finding without the env, so it is **not**
-  auto-forgiven — install the target's deps for a trustworthy type grade.)
+- **tests / typecheck** need the target's installed deps. When the target has no `.venv` for us to
+  grade with (or `pytest` can't collect, or `mypy` can't resolve a module), the dimension reads
+  `watchlist — not graded here`, never `fail`. Without the repo's environment, a red suite or a wall
+  of `Any`-cascade type errors is *our* missing deps, not the repo's defect. Install the target's
+  deps for a trustworthy tests/type grade.
+- **lint** runs `ruff`, but many good repos lint with `black` + `flake8`/`pylint` and never adopted
+  ruff's opinionated defaults. So lint grades **only when the repo actually uses ruff** (a
+  `[tool.ruff]` table, a `ruff.toml`, a pre-commit hook, or a pinned dep); otherwise it reads
+  `watchlist — repo does not adopt ruff`, never `fail`. We don't impose a linter the repo rejected.
+- **security** (`bandit`) scans **shipped code**: test directories are excluded by default (a test's
+  `pickle`/`subprocess`/`assert` is not a deployment risk), and a repo that declares its own
+  `[tool.bandit]` scope is honored as authoritative.
 
 **For a full, fair scorecard, audit a repo with its deps installed** (`cd repo && python -m venv
 .venv && .venv/bin/pip install -e ".[dev]"`, then `forge-audit --path repo`). A bare-clone audit is
-still useful for the static gates (lint, security, CI, README, performance) — it just says so.
+still useful for the gates that don't need the repo's env (security, CI, README, performance, and
+lint when the repo uses ruff) — it just says which dimensions it couldn't grade.
 
 ## Architecture
 
