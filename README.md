@@ -78,6 +78,25 @@ The overall verdict is the worst dimension: any `fail` → **fail**; any `watchl
 collaboration · performance · documentation) are claimed **only** when the dimensions that
 prove them pass.
 
+### Auditing a repo you didn't build (the honest envelope)
+
+forge-audit grades by **running** the gates, so a fair grade needs the target's **dev environment**
+installed — its own `.venv` with its dependencies (which is exactly what the repo's CI reproduces).
+Point it at a bare clone with no deps and the deps-dependent gates can't truly run. Rather than
+**defame a project whose own CI is green**, forge-audit refuses to call that a failure:
+
+- **tests**: when `pytest` can't import/collect the suite (a `ModuleNotFoundError` / collection
+  error), the dimension reads `watchlist — not graded here: suite not collectable (deps absent)`,
+  never `fail`.
+- **typecheck**: when `mypy` reports it can't resolve a module's implementation or stubs, same
+  honest `not graded here`. (A missing-dep *cascade* that surfaces only as `untyped-decorator` /
+  `unused-ignore` is indistinguishable from a real finding without the env, so it is **not**
+  auto-forgiven — install the target's deps for a trustworthy type grade.)
+
+**For a full, fair scorecard, audit a repo with its deps installed** (`cd repo && python -m venv
+.venv && .venv/bin/pip install -e ".[dev]"`, then `forge-audit --path repo`). A bare-clone audit is
+still useful for the static gates (lint, security, CI, README, performance) — it just says so.
+
 ## Architecture
 
 Two seams to the outside world, both mockable, so **tests never touch the network or a

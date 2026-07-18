@@ -28,6 +28,24 @@ def test_a_fully_green_repo_earns_pass_and_role_signals(signals_all_green) -> No
     assert {"testing", "security", "backend", "devops", "collaboration"} <= set(card.role_signals)
 
 
+def test_a_not_runnable_suite_is_watchlist_not_fail(signals_all_green) -> None:
+    # Auditing a foreign repo without its dev env: pytest/mypy cannot import the code. The overall
+    # verdict must be WATCHLIST (we could not fully grade it), never FAIL (we do not defame it).
+    from forge_audit.engine import CommandResult
+
+    results = dict(green(90))
+    results["pytest"] = CommandResult(2, "ModuleNotFoundError: No module named 'trio'\n4 errors")
+    results["mypy"] = CommandResult(
+        1, "error: Cannot find implementation or library stub for module named 'httpx'"
+    )
+    card = _card(results, signals_all_green)
+    assert card.verdict == WATCHLIST
+    tests_dim = next(d for d in card.dimensions if d.name == "tests")
+    assert tests_dim.verdict == WATCHLIST and "not graded here" in tests_dim.evidence
+    # the honest gap is surfaced, not a false failure
+    assert not any(d.verdict == FAIL_V for d in card.dimensions)
+
+
 def test_an_incomplete_readme_is_a_watchlist_gap(signals_all_green) -> None:
     # green everywhere, but the README skips install and test: an honest watchlist naming the gaps
     thin = RepoSignals(
