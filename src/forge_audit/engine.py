@@ -97,6 +97,25 @@ def _resolve(tool: str, runner: Runner, path: Path) -> str | None:
     return shutil.which(tool)
 
 
+# Gates whose verdict is only trustworthy when run with the target's OWN installed deps.
+# mypy (under the near-universal `ignore_missing_imports`) silently degrades absent third-party
+# imports to `Any` and then emits a cascade of untyped-decorator / unused-ignore / subclass-of-Any
+# errors; pytest cannot even import the suite. Those are artifacts of a missing environment, not the
+# repo's real defects -- grading them a `fail` would defame a project whose own CI is green. When we
+# lack the target's env, such a gate reads `not_runnable` (a measurement gap), never `fail`.
+_NEEDS_TARGET_ENV = ("mypy", "pytest")
+
+
+def _has_target_env(tool: str, runner: Runner, path: Path) -> bool:
+    """Did we have the TARGET's own environment to grade this gate with? Under the real runner that
+    means the tool resolved from the target's `.venv` (its installed deps); a foreign repo we only
+    cloned has none. Under a fake runner the injected result is authoritative, so we assume the env
+    is present and grade the canned result exactly as given (keeps the suite deterministic)."""
+    if runner is not subprocess_runner:
+        return True
+    return (path / ".venv" / "bin" / tool).is_file()
+
+
 # The TOTAL row has a variable column count: flat coverage is `TOTAL Stmts Miss Cover`, but BRANCH
 # coverage (the stricter kind) is `TOTAL Stmts Miss Branch BrPart Cover`. Match any number of
 # integer columns before the final percent, so a repo isn't undersold for using branch coverage.
@@ -177,8 +196,16 @@ def run_gate(gate: str, tool: str, args: list[str], path: Path, runner: Runner) 
         return GateReading(
             gate, NOT_RUNNABLE, f"imports unresolved (deps absent): {_summarize(result.out)}"
         )
+    if result.code != 0 and tool in _NEEDS_TARGET_ENV and not _has_target_env(tool, runner, path):
+        # We graded without the target's own deps; its `Any`-cascade errors are not real defects.
+        return GateReading(
+            gate,
+            NOT_RUNNABLE,
+            f"{tool} needs the target's installed deps to grade; no .venv found "
+            "(audit with the repo's own environment for a verdict)",
+        )
     status = PASS if result.code == 0 else FAIL
-    return GateReading(gate, status, _summarize(result.out))
+    return GateReading(gate, status, _evidence(tool, result.out))
 
 
 def run_tests(path: Path, runner: Runner) -> GateReading:
@@ -195,6 +222,14 @@ def run_tests(path: Path, runner: Runner) -> GateReading:
         return GateReading(
             "tests", NOT_RUNNABLE, f"suite not collectable (deps absent): {_summarize(result.out)}"
         )
+    if result.code != 0 and not _has_target_env("pytest", runner, path):
+        # We graded without the target's own deps; a red suite here is our missing env, not its bug.
+        return GateReading(
+            "tests",
+            NOT_RUNNABLE,
+            "suite needs the target's installed deps to run; no .venv found "
+            "(audit with the repo's own environment for a verdict)",
+        )
     status = PASS if result.code == 0 else FAIL
     return GateReading("tests", status, _summarize(result.out), _parse_coverage(result.out))
 
@@ -203,6 +238,33 @@ def _summarize(out: str) -> str:
     """The last non-empty line of output -- enough evidence to quote, not a wall of text."""
     lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
     return lines[-1] if lines else "(no output)"
+
+
+# Bandit's last non-empty line is boilerplate ("Files skipped (0):"), so `_summarize` would quote
+# nothing useful for a security FAIL. The real evidence is its severity tally. Isolate the "by
+# severity" block first -- bandit prints an identically-shaped "by confidence" block right after it,
+# and matching High/Medium across both would report the confidence counts (e.g. 1306) as severities.
+_BANDIT_SEVERITY_BLOCK = re.compile(r"by severity\):(.*?)(?:by confidence\)|\Z)", re.DOTALL)
+_BANDIT_SEVERITY_LINE = re.compile(r"^\s*(High|Medium):\s*(\d+)\s*$", re.MULTILINE)
+
+
+def _summarize_bandit(out: str) -> str | None:
+    """Pull bandit's High/Medium severity counts as evidence; None if the tally can't be found."""
+    block = _BANDIT_SEVERITY_BLOCK.search(out)
+    section = block.group(1) if block else out
+    counts = {m.group(1).lower(): int(m.group(2)) for m in _BANDIT_SEVERITY_LINE.finditer(section)}
+    parts = [f"{counts[sev]} {sev}" for sev in ("high", "medium") if counts.get(sev)]
+    return f"{', '.join(parts)} severity issue(s)" if parts else None
+
+
+def _evidence(tool: str, out: str) -> str:
+    """The evidence line to quote for a gate. Bandit gets its severity tally (its last line is
+    boilerplate); every other tool's last non-empty line is enough to stand as evidence."""
+    if tool == "bandit":
+        bandit_summary = _summarize_bandit(out)
+        if bandit_summary is not None:
+            return bandit_summary
+    return _summarize(out)
 
 
 def diagnose(path: Path, runner: Runner = subprocess_runner) -> list[GateReading]:
