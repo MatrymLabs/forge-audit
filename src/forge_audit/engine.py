@@ -135,12 +135,22 @@ def _bandit_args(path: Path) -> list[str]:
     `--severity-level medium` is deliberate: low-severity findings (e.g. subprocess use)
     are noise every mature repo triages, not vulnerabilities. Gating on them would fail
     nearly every real codebase and make the verdict meaningless. We block on what matters.
+
+    Test directories are excluded when the repo has NO bandit config of its own. bandit grades
+    shipped code, and test fixtures routinely use pickle/subprocess/assert that are not deployment
+    risks -- scanning them would fail a foreign repo on its own test suite (httpx: 8 of 9 medium+
+    findings were pickle in tests, 1 real finding in product code). A repo that DECLARES
+    [tool.bandit] sets its own scope, so we honor its config and impose nothing beyond infra dirs.
     """
-    args = ["-r", ".", "-q", "--severity-level", "medium", "--exclude", "./.venv,./.git"]
+    excludes = "./.venv,./.git"
     pyproject = path / "pyproject.toml"
-    if pyproject.is_file() and "[tool.bandit]" in pyproject.read_text(
+    has_config = pyproject.is_file() and "[tool.bandit]" in pyproject.read_text(
         encoding="utf-8", errors="ignore"
-    ):
+    )
+    if not has_config:
+        excludes += ",./tests,./test"
+    args = ["-r", ".", "-q", "--severity-level", "medium", "--exclude", excludes]
+    if has_config:
         args = ["-c", "pyproject.toml", *args]
     return args
 
