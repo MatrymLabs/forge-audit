@@ -81,20 +81,20 @@ prove them pass.
 ### Auditing a repo you didn't build (the honest envelope)
 
 forge-audit grades by **running** the gates, so a fair grade needs the target's **dev environment**
-installed — its own `.venv` with its dependencies (which is exactly what the repo's CI reproduces).
+installed - its own `.venv` with its dependencies (which is exactly what the repo's CI reproduces).
 Point it at a bare clone with no deps and the deps-dependent gates can't truly run. Rather than
 **defame a project whose own CI is green**, forge-audit refuses to call that a failure, and it grades
 each repo by **its own toolchain**, never ours:
 
 - **tests / typecheck** need the target's installed deps. When the target has no `.venv` for us to
   grade with (or `pytest` can't collect, or `mypy` can't resolve a module), the dimension reads
-  `watchlist — not graded here`, never `fail`. Without the repo's environment, a red suite or a wall
+  `watchlist - not graded here`, never `fail`. Without the repo's environment, a red suite or a wall
   of `Any`-cascade type errors is *our* missing deps, not the repo's defect. Install the target's
   deps for a trustworthy tests/type grade.
 - **lint** runs `ruff`, but many good repos lint with `black` + `flake8`/`pylint` and never adopted
   ruff's opinionated defaults. So lint grades **only when the repo actually uses ruff** (a
   `[tool.ruff]` table, a `ruff.toml`, a pre-commit hook, or a pinned dep); otherwise it reads
-  `watchlist — repo does not adopt ruff`, never `fail`. We don't impose a linter the repo rejected.
+  `watchlist - repo does not adopt ruff`, never `fail`. We don't impose a linter the repo rejected.
 - **security** (`bandit`) scans **shipped code**: test directories are excluded by default (a test's
   `pickle`/`subprocess`/`assert` is not a deployment risk), and a repo that declares its own
   `[tool.bandit]` scope is honored as authoritative.
@@ -102,7 +102,19 @@ each repo by **its own toolchain**, never ours:
 **For a full, fair scorecard, audit a repo with its deps installed** (`cd repo && python -m venv
 .venv && .venv/bin/pip install -e ".[dev]"`, then `forge-audit --path repo`). A bare-clone audit is
 still useful for the gates that don't need the repo's env (security, CI, README, performance, and
-lint when the repo uses ruff) — it just says which dimensions it couldn't grade.
+lint when the repo uses ruff) - it just says which dimensions it couldn't grade.
+
+### In the wild
+
+The envelope above is a claim; [`docs/in_the_wild/`](docs/in_the_wild/) is the proof. It grades
+three well-known Python repos it did not build - [tenacity](https://github.com/jd/tenacity),
+[rich](https://github.com/Textualize/rich), and [httpx](https://github.com/encode/httpx) - each
+with its full dev environment installed, at the advanced bar, with the raw JSON scorecards
+committed. Together they show every honest behavior in one place: it **passes** what is clean
+(httpx: lint + typecheck + tests at 100% coverage), **abstains** where it lacks the environment
+(never a `fail`), **respects the repo's own toolchain** (rich lints with black, so lint is not
+graded against ruff), and **reports real findings for a human to interpret** (httpx's one high is
+its RFC-mandated digest-auth hash - the scanner sees a weak hash, the engineer sees the spec).
 
 ## Architecture
 

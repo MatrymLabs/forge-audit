@@ -1,0 +1,70 @@
+{
+  "repo": "tenacity",
+  "stage": "advanced",
+  "verdict": "watchlist",
+  "dimensions": [
+    {
+      "name": "lint",
+      "verdict": "pass",
+      "evidence": "clean"
+    },
+    {
+      "name": "typecheck",
+      "verdict": "watchlist",
+      "evidence": "not graded here: imports unresolved (deps absent): Found 4 errors in 2 files (checked 19 source files)"
+    },
+    {
+      "name": "tests",
+      "verdict": "pass",
+      "evidence": "green suite, coverage 95% ≥ 85%"
+    },
+    {
+      "name": "security",
+      "verdict": "pass",
+      "evidence": "clean"
+    },
+    {
+      "name": "dependencies",
+      "verdict": "pass",
+      "evidence": "clean"
+    },
+    {
+      "name": "ci",
+      "verdict": "watchlist",
+      "evidence": "2 workflow(s) < 3 for this stage"
+    },
+    {
+      "name": "collaboration",
+      "verdict": "watchlist",
+      "evidence": "no merged-PR loop observed (or offline)"
+    },
+    {
+      "name": "performance",
+      "verdict": "watchlist",
+      "evidence": "no benchmark/profiling artifact found"
+    },
+    {
+      "name": "readme",
+      "verdict": "pass",
+      "evidence": "covers purpose, install, run, test"
+    }
+  ],
+  "role_signals": [
+    "testing",
+    "security",
+    "documentation"
+  ],
+  "top_gaps": [
+    "typecheck: not graded here: imports unresolved (deps absent): Found 4 errors in 2 files (checked 19 source files)",
+    "ci: 2 workflow(s) < 3 for this stage",
+    "collaboration: no merged-PR loop observed (or offline)",
+    "performance: no benchmark/profiling artifact found"
+  ],
+  "top_strengths": [
+    "lint",
+    "tests",
+    "security",
+    "dependencies",
+    "readme"
+  ]
+}
