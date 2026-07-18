@@ -34,7 +34,7 @@ jobs:
       # Publish the coverage report so the README badge is earned, not asserted.
       # Tokenless upload (public repo); a Codecov hiccup must never red the build.
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
