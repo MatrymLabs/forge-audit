@@ -206,6 +206,35 @@ def _uses_ruff(path: Path) -> bool:
     )
 
 
+# The non-ruff formatters/linters we can recognize by name, so an abstained lint gate can say what
+# the repo lints WITH ("lints with black + isort") instead of only "not ruff". This is evidence, not
+# execution: we never run a foreign tool (it would need the repo's own version to be trustworthy).
+_OTHER_LINTERS = ("black", "isort", "flake8", "pylint", "autopep8", "yapf")
+
+
+def _detected_linters(path: Path) -> list[str]:
+    """Names of the non-ruff formatters/linters the repo adopts -- a best-effort scan of its config
+    surfaces. Used only to enrich the lint-abstention message; empty when nothing is recognized."""
+    found: set[str] = set()
+    # Config files whose mere presence names the tool (their contents may not spell it out).
+    if (path / ".pylintrc").is_file():
+        found.add("pylint")
+    if (path / ".flake8").is_file():
+        found.add("flake8")
+    # Text surfaces where a tool's name or config table appears.
+    parts = [
+        (path / name).read_text(encoding="utf-8", errors="ignore")
+        for name in ("pyproject.toml", "setup.cfg", "tox.ini", ".pre-commit-config.yaml")
+        if (path / name).is_file()
+    ]
+    parts += [
+        req.read_text(encoding="utf-8", errors="ignore") for req in path.glob("requirements*.txt")
+    ]
+    blob = "\n".join(parts).lower()
+    found.update(tool for tool in _OTHER_LINTERS if tool in blob)
+    return sorted(found)
+
+
 # --- The gates, in cheapest-first order (tests handled separately for coverage) --
 # Each entry: (gate name, tool, args-after-the-tool).
 def _gate_specs(path: Path) -> tuple[tuple[str, str, list[str]], ...]:
@@ -221,7 +250,14 @@ def run_gate(gate: str, tool: str, args: list[str], path: Path, runner: Runner) 
     """Ignite one gate: skip honestly if its tool is absent, else run and read the code."""
     if gate == "lint" and not _uses_ruff(path):
         # The repo lints with something other than ruff; grading it by our ruff would defame it.
-        return GateReading(gate, NOT_CONFIGURED, "repo does not adopt ruff (no config or dep)")
+        # Name what it DOES use, so the abstention is evidence, not a shrug.
+        others = _detected_linters(path)
+        detail = (
+            f"repo lints with {' + '.join(others)}, not ruff (not graded here)"
+            if others
+            else "repo does not adopt ruff (no config or dep)"
+        )
+        return GateReading(gate, NOT_CONFIGURED, detail)
     resolved = _resolve(tool, runner, path)
     if resolved is None:
         return GateReading(gate, NOT_CONFIGURED, f"{tool} not found (no venv or PATH)")

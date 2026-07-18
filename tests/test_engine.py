@@ -207,6 +207,30 @@ def test_lint_abstains_when_the_repo_does_not_adopt_ruff(tmp_path: Path) -> None
     assert "does not adopt ruff" in reading.detail
 
 
+def test_detected_linters_names_the_repos_own_tools(tmp_path: Path) -> None:
+    from forge_audit.engine import _detected_linters
+
+    assert _detected_linters(tmp_path) == []  # nothing recognized
+    (tmp_path / "pyproject.toml").write_text(
+        "[tool.black]\nline-length = 88\n[tool.isort]\nprofile = 'black'\n", encoding="utf-8"
+    )
+    assert _detected_linters(tmp_path) == ["black", "isort"]  # sorted, deduped
+    # Config files whose presence names the tool even if their contents don't spell it out.
+    (tmp_path / ".pylintrc").write_text("[MASTER]\n", encoding="utf-8")
+    assert "pylint" in _detected_linters(tmp_path)
+    (tmp_path / ".flake8").write_text("[flake8]\nmax-line-length = 100\n", encoding="utf-8")
+    assert "flake8" in _detected_linters(tmp_path)
+
+
+def test_lint_abstain_names_the_repos_actual_linter(tmp_path: Path) -> None:
+    # The enriched abstention is evidence, not a shrug: say what the repo lints WITH (rich = black).
+    (tmp_path / "pyproject.toml").write_text("[tool.black]\nline-length = 88\n", encoding="utf-8")
+    runner = FakeRunner({"ruff": CommandResult(1, "E712 comparison to True")})
+    reading = run_gate("lint", "ruff", ["check", "."], tmp_path, runner)
+    assert reading.status == NOT_CONFIGURED
+    assert "lints with black, not ruff" in reading.detail
+
+
 def test_lint_still_grades_a_repo_that_adopts_ruff(tmp_path: Path) -> None:
     # A repo that DOES use ruff is graded normally -- abstention never masks a real lint failure.
     (tmp_path / "pyproject.toml").write_text("[tool.ruff]\nline-length = 100\n", encoding="utf-8")
