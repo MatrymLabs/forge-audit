@@ -181,6 +181,31 @@ def _mypy_args(path: Path) -> list[str]:
     return ["."]
 
 
+def _uses_ruff(path: Path) -> bool:
+    """Has the target ADOPTED ruff? The lint gate runs ruff, but many good repos lint with black +
+    flake8/pylint and never opted into ruff's (opinionated) default rules. Running our ruff over
+    such a repo manufactures a wall of style findings it never agreed to (rich: 84 findings, and it
+    lints with black + mypy). So we grade lint only when the repo actually uses ruff -- a config, a
+    ruff.toml, a pre-commit hook, or a pinned dep -- and abstain honestly otherwise. Rule #1:
+    audit a repo with ITS OWN toolchain, not ours."""
+    if (path / "ruff.toml").is_file() or (path / ".ruff.toml").is_file():
+        return True
+    pyproject = path / "pyproject.toml"
+    # `[tool.ruff` (no closing bracket) catches both `[tool.ruff]` and sub-tables like
+    # `[tool.ruff.lint]` that a repo may declare without the parent header.
+    if pyproject.is_file() and "[tool.ruff" in pyproject.read_text(
+        encoding="utf-8", errors="ignore"
+    ):
+        return True
+    precommit = path / ".pre-commit-config.yaml"
+    if precommit.is_file() and "ruff" in precommit.read_text(encoding="utf-8", errors="ignore"):
+        return True
+    return any(
+        "ruff" in req.read_text(encoding="utf-8", errors="ignore")
+        for req in path.glob("requirements*.txt")
+    )
+
+
 # --- The gates, in cheapest-first order (tests handled separately for coverage) --
 # Each entry: (gate name, tool, args-after-the-tool).
 def _gate_specs(path: Path) -> tuple[tuple[str, str, list[str]], ...]:
@@ -194,6 +219,9 @@ def _gate_specs(path: Path) -> tuple[tuple[str, str, list[str]], ...]:
 
 def run_gate(gate: str, tool: str, args: list[str], path: Path, runner: Runner) -> GateReading:
     """Ignite one gate: skip honestly if its tool is absent, else run and read the code."""
+    if gate == "lint" and not _uses_ruff(path):
+        # The repo lints with something other than ruff; grading it by our ruff would defame it.
+        return GateReading(gate, NOT_CONFIGURED, "repo does not adopt ruff (no config or dep)")
     resolved = _resolve(tool, runner, path)
     if resolved is None:
         return GateReading(gate, NOT_CONFIGURED, f"{tool} not found (no venv or PATH)")

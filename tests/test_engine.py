@@ -176,6 +176,46 @@ def test_bandit_excludes_test_dirs_by_default_but_defers_to_a_repos_own_config(
     assert "./tests" not in exclude_configured  # honor the repo's own scope, don't override it
 
 
+# --- Foreign-repo honesty: lint abstains when the repo doesn't adopt ruff ------------------------
+
+
+def test_uses_ruff_detects_each_adoption_signal(tmp_path: Path) -> None:
+    from forge_audit.engine import _uses_ruff
+
+    assert _uses_ruff(tmp_path) is False  # a black+mypy repo like rich: no ruff anywhere
+    (tmp_path / "pyproject.toml").write_text("[tool.ruff.lint]\nselect = ['E']\n", encoding="utf-8")
+    assert _uses_ruff(tmp_path) is True  # sub-table counts, not just [tool.ruff]
+    (tmp_path / "pyproject.toml").unlink()
+    (tmp_path / "ruff.toml").write_text("line-length = 100\n", encoding="utf-8")
+    assert _uses_ruff(tmp_path) is True
+    (tmp_path / "ruff.toml").unlink()
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n  - repo: https://github.com/astral-sh/ruff-pre-commit\n", encoding="utf-8"
+    )
+    assert _uses_ruff(tmp_path) is True  # a pre-commit hook counts
+    (tmp_path / ".pre-commit-config.yaml").unlink()
+    (tmp_path / "requirements-dev.txt").write_text("ruff==0.15.0\n", encoding="utf-8")
+    assert _uses_ruff(tmp_path) is True
+
+
+def test_lint_abstains_when_the_repo_does_not_adopt_ruff(tmp_path: Path) -> None:
+    # rich lints with black+mypy; our ruff would manufacture 84 findings it never opted into.
+    # Grade not_configured (a visible gap), never fail -- do not impose a linter the repo rejected.
+    runner = FakeRunner({"ruff": CommandResult(1, "E712 comparison to True")})
+    reading = run_gate("lint", "ruff", ["check", "."], tmp_path, runner)
+    assert reading.status == NOT_CONFIGURED
+    assert "does not adopt ruff" in reading.detail
+
+
+def test_lint_still_grades_a_repo_that_adopts_ruff(tmp_path: Path) -> None:
+    # A repo that DOES use ruff is graded normally -- abstention never masks a real lint failure.
+    (tmp_path / "pyproject.toml").write_text("[tool.ruff]\nline-length = 100\n", encoding="utf-8")
+    runner = FakeRunner({"ruff": CommandResult(1, "E501 line too long")})
+    reading = run_gate("lint", "ruff", ["check", "."], tmp_path, runner)
+    assert reading.status == FAIL
+    assert "E501" in reading.detail
+
+
 # --- Foreign-repo honesty: no target env -> not_runnable, never a false fail ----------------------
 
 

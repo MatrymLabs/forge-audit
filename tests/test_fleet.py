@@ -30,6 +30,8 @@ def _repos(tmp_path: Path, *names: str) -> list[Path]:
     for name in names:
         d = tmp_path / name
         d.mkdir()
+        # A repo whose (fake) ruff result we grade is one that adopts ruff, so lint isn't abstained.
+        (d / "pyproject.toml").write_text("[tool.ruff]\n", encoding="utf-8")
         dirs.append(d)
     return dirs
 
