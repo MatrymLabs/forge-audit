@@ -8,6 +8,7 @@ from forge_audit.engine import (
     ERROR,
     FAIL,
     NOT_CONFIGURED,
+    NOT_RUNNABLE,
     PASS,
     CommandResult,
     diagnose,
@@ -38,6 +39,36 @@ def test_branch_coverage_total_is_parsed_not_just_flat() -> None:
     assert _parse_coverage("TOTAL   14570   445   2244   216   96%") == 96.0
     assert _parse_coverage("TOTAL   100   5   95%") == 95.0  # flat still works
     assert _parse_coverage("no total line here") is None
+
+
+def test_pytest_import_error_reads_not_runnable_not_fail() -> None:
+    # Auditing a foreign repo without its dev env: the suite cannot be imported. That is a
+    # measurement gap, NOT evidence the repo's tests fail -- grading it fail would defame the repo.
+    out = "ERROR collecting tests/test_x.py\nModuleNotFoundError: No module named 'trio'\n4 errors"
+    reading = run_tests(HERE, FakeRunner({"pytest": CommandResult(2, out)}))
+    assert reading.status == NOT_RUNNABLE
+
+
+def test_a_genuine_test_failure_still_reads_fail() -> None:
+    # A real failure (no import/collection error) still fails -- the fix never masks a red suite.
+    reading = run_tests(HERE, FakeRunner({"pytest": CommandResult(1, "1 failed in 0.10s")}))
+    assert reading.status == FAIL
+
+
+def test_mypy_missing_stub_reads_not_runnable_not_fail() -> None:
+    out = "src/x.py:1: error: Cannot find implementation or library stub for module named 'httpx'"
+    reading = run_gate(
+        "typecheck", "mypy", ["."], HERE, FakeRunner({"mypy": CommandResult(1, out)})
+    )
+    assert reading.status == NOT_RUNNABLE
+
+
+def test_a_real_mypy_type_error_still_reads_fail() -> None:
+    out = 'src/x.py:3: error: Incompatible return value type (got "int", expected "str")'
+    reading = run_gate(
+        "typecheck", "mypy", ["."], HERE, FakeRunner({"mypy": CommandResult(1, out)})
+    )
+    assert reading.status == FAIL
 
 
 def test_a_nonzero_exit_is_reported_as_fail_not_swallowed() -> None:

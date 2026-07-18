@@ -26,8 +26,35 @@ from pathlib import Path
 # --- Gate outcomes ---------------------------------------------------------------
 PASS = "pass"  # nosec B105 -- a gate verdict, not a password
 FAIL = "fail"
-NOT_CONFIGURED = "not_configured"
+NOT_CONFIGURED = "not_configured"  # the tool itself is absent (no venv or PATH)
+NOT_RUNNABLE = "not_runnable"  # the tool ran but could not exercise the code (deps/env absent)
 ERROR = "error"
+
+# Auditing a repo we did NOT build, we may lack its dev environment. A gate that could not RUN the
+# code (imports unresolved, suite uncollectable) is not evidence the repo is broken -- grading it a
+# `fail` would defame a project whose own CI is green. These markers separate "could not run here"
+# from "ran and failed", so a foreign-repo audit stays honest. A genuinely failing suite does not
+# emit an import/collection error, so this never masks a real failure.
+_PYTEST_UNRUNNABLE = (
+    "no module named",
+    "modulenotfounderror",
+    "importerror",
+    "error collecting",
+    "errors during collection",
+    "internalerror",
+)
+# mypy could not resolve the code's own imports (third-party deps/stubs absent), so its type verdict
+# is untrustworthy -- a missing environment, not a genuine type error.
+_MYPY_UNRUNNABLE = (
+    "cannot find implementation or library stub",
+    "cannot find module",
+    "import-not-found",
+)
+
+
+def _matches(out: str, markers: tuple[str, ...]) -> bool:
+    low = out.lower()
+    return any(marker in low for marker in markers)
 
 
 @dataclass(frozen=True)
@@ -145,6 +172,11 @@ def run_gate(gate: str, tool: str, args: list[str], path: Path, runner: Runner) 
         result = runner([resolved, *args], path)
     except Exception as exc:  # a broken tool must surface, never masquerade as pass
         return GateReading(gate, ERROR, f"{tool} raised: {exc}")
+    if result.code != 0 and tool == "mypy" and _matches(result.out, _MYPY_UNRUNNABLE):
+        # mypy could not resolve the code's imports -- a missing env, not a real type error.
+        return GateReading(
+            gate, NOT_RUNNABLE, f"imports unresolved (deps absent): {_summarize(result.out)}"
+        )
     status = PASS if result.code == 0 else FAIL
     return GateReading(gate, status, _summarize(result.out))
 
@@ -158,6 +190,11 @@ def run_tests(path: Path, runner: Runner) -> GateReading:
         result = runner([resolved, "--cov", "--cov-report=term-missing", "-q"], path)
     except Exception as exc:
         return GateReading("tests", ERROR, f"pytest raised: {exc}")
+    if result.code != 0 and _matches(result.out, _PYTEST_UNRUNNABLE):
+        # The suite could not be imported/collected here (deps absent) -- not a real failure.
+        return GateReading(
+            "tests", NOT_RUNNABLE, f"suite not collectable (deps absent): {_summarize(result.out)}"
+        )
     status = PASS if result.code == 0 else FAIL
     return GateReading("tests", status, _summarize(result.out), _parse_coverage(result.out))
 
