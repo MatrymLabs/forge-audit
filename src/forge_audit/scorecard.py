@@ -14,6 +14,7 @@ from pathlib import Path
 
 from forge_audit.engine import (
     NOT_CONFIGURED,
+    NOT_RUNNABLE,
     PASS,
     GateReading,
     Runner,
@@ -63,6 +64,10 @@ class Scorecard:
 
 def _grade_tests(reading: GateReading, floor: int) -> Dimension:
     """Tests+coverage: fail if the suite is red or absent; watchlist if below the floor."""
+    if reading.status == NOT_RUNNABLE:
+        # We could not run the suite here (auditing a repo without its dev env). Honest: a
+        # measurement gap, never a claim the repo's tests fail.
+        return Dimension("tests", WATCHLIST, f"not graded here: {reading.detail}")
     if reading.status == NOT_CONFIGURED:
         return Dimension("tests", FAIL_V, "no test suite detected")
     if reading.status != PASS:
@@ -77,6 +82,9 @@ def _grade_tests(reading: GateReading, floor: int) -> Dimension:
 
 def _grade_gate(name: str, reading: GateReading) -> Dimension:
     """A hard gate (lint/typecheck/security/deps): pass green, watchlist absent, else fail."""
+    if reading.status == NOT_RUNNABLE:
+        # Could not exercise the code here (deps/env absent): a measurement gap, not a fail.
+        return Dimension(name, WATCHLIST, f"not graded here: {reading.detail}")
     if reading.status == NOT_CONFIGURED:
         return Dimension(name, WATCHLIST, reading.detail)
     if reading.status == PASS:
