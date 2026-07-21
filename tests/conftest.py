@@ -54,4 +54,7 @@ def signals_all_green() -> RepoSignals:
         merged_prs=4,
         performance="benchmarks/ directory",
         readme=("purpose", "install", "run", "test"),
+        license_name="MIT",
+        license_file="LICENSE",
+        provenance=("THIRD_PARTY_NOTICES.md",),
     )

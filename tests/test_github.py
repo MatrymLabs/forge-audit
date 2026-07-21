@@ -8,6 +8,7 @@ from forge_audit.github import (
     GhProbe,
     OfflineProbe,
     count_workflows,
+    detect_license,
     performance_evidence,
     readme_coverage,
 )
@@ -116,3 +117,87 @@ def test_no_readme_file_is_none(tmp_path: Path) -> None:
 def test_the_probe_reports_readme_coverage(tmp_path: Path) -> None:
     (tmp_path / "README.md").write_text(_FULL_README)
     assert OfflineProbe().signals(tmp_path).readme == ("purpose", "install", "run", "test")
+
+
+# --- license + provenance detection (local, network-free) -----------------------
+
+_MIT = "MIT License\n\nPermission is hereby granted, free of charge, to any person obtaining a copy"
+_APACHE = "Apache License\nVersion 2.0, January 2004"
+_BSD3 = (
+    "Redistribution and use in source and binary forms, with or without modification, are "
+    "permitted provided that the following conditions are met:\n"
+    "* Neither the name of the copyright holder nor the names of its contributors"
+)
+_GPL3 = "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007"
+
+
+def test_a_mit_license_file_is_recognized(tmp_path: Path) -> None:
+    (tmp_path / "LICENSE").write_text(_MIT)
+    info = detect_license(tmp_path)
+    assert info.name == "MIT" and info.source_file == "LICENSE"
+
+
+def test_apache_bsd_and_gpl_are_recognized_by_signature(tmp_path: Path) -> None:
+    (tmp_path / "LICENSE").write_text(_APACHE)
+    assert detect_license(tmp_path).name == "Apache-2.0"
+    (tmp_path / "LICENSE").write_text(_BSD3)
+    assert detect_license(tmp_path).name == "BSD-3-Clause"
+    (tmp_path / "COPYING").write_text(_GPL3)  # a second file present
+    # LICENSE still wins by scan order, but rewrite it to GPL to prove GPL detection
+    (tmp_path / "LICENSE").write_text(_GPL3)
+    assert detect_license(tmp_path).name == "GPL-3.0"
+
+
+def test_an_explicit_spdx_tag_wins_over_signature(tmp_path: Path) -> None:
+    (tmp_path / "LICENSE").write_text("SPDX-License-Identifier: Apache-2.0\n" + _MIT)
+    assert detect_license(tmp_path).name == "Apache-2.0"
+
+
+def test_no_license_file_reads_as_none(tmp_path: Path) -> None:
+    info = detect_license(tmp_path)
+    assert info.name is None and info.source_file == ""
+
+
+def test_an_unrecognized_license_file_reads_as_unknown(tmp_path: Path) -> None:
+    (tmp_path / "LICENSE").write_text("Do whatever you feel like, honestly.\n")
+    info = detect_license(tmp_path)
+    assert info.name == "unknown" and info.source_file == "LICENSE"
+
+
+def test_pyproject_is_the_fallback_when_no_license_file(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\nlicense = "MIT"\n')
+    info = detect_license(tmp_path)
+    assert info.name == "MIT" and "pyproject" in info.source_file
+
+
+def test_an_osi_classifier_is_read_from_pyproject(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "x"\nclassifiers = ["License :: OSI Approved :: MIT License"]\n'
+    )
+    assert detect_license(tmp_path).name == "MIT License"
+
+
+def test_a_license_table_form_is_read_from_pyproject(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "x"\nlicense = {text = "BSD-3-Clause"}\n'
+    )
+    assert detect_license(tmp_path).name == "BSD-3-Clause"
+
+
+def test_a_malformed_pyproject_is_not_this_checks_business(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text("this is not = valid toml [[[\n")
+    info = detect_license(tmp_path)
+    assert info.name is None  # falls through to "nothing found", never raises
+
+
+def test_provenance_artifacts_are_reported(tmp_path: Path) -> None:
+    (tmp_path / "LICENSE").write_text(_MIT)
+    (tmp_path / "THIRD_PARTY_NOTICES.md").write_text("credits\n")
+    info = detect_license(tmp_path)
+    assert info.provenance == ("THIRD_PARTY_NOTICES.md",)
+
+
+def test_the_probe_reports_license_signals(tmp_path: Path) -> None:
+    (tmp_path / "LICENSE").write_text(_MIT)
+    signals = OfflineProbe().signals(tmp_path)
+    assert signals.license_name == "MIT" and signals.license_file == "LICENSE"

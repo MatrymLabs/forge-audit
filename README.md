@@ -64,6 +64,7 @@ refuses the run rather than grading a partial, misleading fleet.
 | `collaboration` | merged PRs (via the GitHub seam) | at least one closed issue→PR→merge loop |
 | `performance` | a benchmark artifact (`benchmarks/`, a `bench` Makefile target, or a `reports/` perf dir) | present (else a watchlist gap) |
 | `readme` | the README's content (purpose · install · run · test) | all four covered (else a watchlist gap naming what's missing) |
+| `license` | a LICENSE file (SPDX tag or text signature) or a `pyproject` declaration, plus any provenance artifacts (third-party notices / attribution / SBOM) | a recognized license is present (else a watchlist gap: reuse rights unclear) |
 
 ### Stage thresholds (baked in - the gate is objective, not vibes)
 
@@ -153,7 +154,8 @@ $ forge-audit --path . --stage intermediate --online --format md
 | collaboration | ✅ pass | a real issue -> PR -> merge history |
 | performance | ✅ pass | a `benchmarks/` directory (`make bench` times the tool's own grading overhead) |
 | readme | ✅ pass | covers purpose, install, run, test |
-| **overall** | **✅ pass** | role signals: testing · security · backend · devops · collaboration · performance · documentation |
+| license | ✅ pass | MIT (LICENSE) |
+| **overall** | **✅ pass** | role signals: testing · security · backend · devops · collaboration · performance · documentation · compliance |
 
 Honest about its own age: at the **advanced** stage the tool grades itself `watchlist`, not
 `pass` - a young repo with two workflow files legitimately sits on the watchlist, and the

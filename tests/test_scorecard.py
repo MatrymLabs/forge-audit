@@ -125,6 +125,42 @@ def test_no_merged_prs_is_a_watchlist_collaboration_signal(signals_all_green) ->
     assert "collaboration" not in card.role_signals
 
 
+def test_a_recognized_license_earns_a_pass_and_the_compliance_role(signals_all_green) -> None:
+    card = _card(green(90), signals_all_green)  # the fixture declares MIT + a notices file
+    lic = next(d for d in card.dimensions if d.name == "license")
+    assert lic.verdict == PASS_V
+    assert "MIT" in lic.evidence and "provenance" in lic.evidence
+    assert "compliance" in card.role_signals
+
+
+def test_a_missing_license_is_a_watchlist_gap_not_a_fail(signals_all_green) -> None:
+    no_license = RepoSignals(
+        workflows=3,
+        merged_prs=4,
+        performance="benchmarks/",
+        readme=("purpose", "install", "run", "test"),
+    )
+    card = _card(green(90), no_license)
+    lic = next(d for d in card.dimensions if d.name == "license")
+    assert lic.verdict == WATCHLIST and "reuse rights unclear" in lic.evidence
+    assert card.verdict == WATCHLIST  # a missing license never fails a repo, only flags it
+    assert "compliance" not in card.role_signals
+
+
+def test_a_present_but_unrecognized_license_is_a_watchlist(signals_all_green) -> None:
+    murky = RepoSignals(
+        workflows=3,
+        merged_prs=4,
+        performance="benchmarks/",
+        readme=("purpose", "install", "run", "test"),
+        license_name="unknown",
+        license_file="LICENSE",
+    )
+    card = _card(green(90), murky)
+    lic = next(d for d in card.dimensions if d.name == "license")
+    assert lic.verdict == WATCHLIST and "unrecognized" in lic.evidence
+
+
 def test_an_unknown_stage_fails_loud(signals_all_green) -> None:
     with pytest.raises(ValueError, match="unknown stage"):
         _card(green(90), signals_all_green, stage="wizard")

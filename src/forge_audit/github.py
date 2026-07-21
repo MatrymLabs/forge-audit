@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -25,6 +26,10 @@ class RepoSignals:
     merged_prs: int
     performance: str = ""  # a benchmark/profiling artifact, if one is present (evidence, or "")
     readme: tuple[str, ...] | None = None  # README essentials covered; None if there is no README
+    license_name: str | None = None  # detected SPDX-ish id; "unknown" if a file is present but
+    # unrecognized; None if no license is declared anywhere.
+    license_file: str = ""  # where the license was read from ("" if none)
+    provenance: tuple[str, ...] = ()  # third-party-notices / attribution / SBOM artifacts present
 
 
 class RepoProbe(Protocol):
@@ -110,6 +115,108 @@ def readme_coverage(path: Path) -> tuple[str, ...] | None:
     return tuple(covered)
 
 
+# --- license + provenance (read locally, no network) -----------------------------
+_LICENSE_FILES = (
+    "LICENSE",
+    "LICENSE.md",
+    "LICENSE.txt",
+    "LICENCE",
+    "LICENCE.md",
+    "COPYING",
+    "COPYING.md",
+)
+_PROVENANCE_FILES = (
+    "THIRD_PARTY_NOTICES.md",
+    "THIRD_PARTY_NOTICES",
+    "NOTICE",
+    "NOTICE.md",
+    "ATTRIBUTION.md",
+    "sbom.json",
+    "bom.json",
+)
+_SPDX_RE = re.compile(r"SPDX-License-Identifier:\s*([A-Za-z0-9.+-]+)")
+# Ordered signatures: the FIRST whose needles are all present wins, so more specific licenses
+# come before the family they extend (BSD-3 before BSD-2; AGPL before GPL; GPL-3 before GPL-2).
+_LICENSE_SIGNATURES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Apache-2.0", ("apache license", "version 2.0")),
+    ("MIT", ("permission is hereby granted, free of charge",)),
+    ("BSD-3-Clause", ("redistribution and use in source and binary", "neither the name")),
+    ("BSD-2-Clause", ("redistribution and use in source and binary",)),
+    ("AGPL-3.0", ("gnu affero general public license",)),
+    ("GPL-3.0", ("gnu general public license", "version 3")),
+    ("GPL-2.0", ("gnu general public license", "version 2")),
+    ("LGPL-3.0", ("gnu lesser general public license",)),
+    ("MPL-2.0", ("mozilla public license", "2.0")),
+    ("ISC", ("isc license",)),
+    ("Unlicense", ("this is free and unencumbered software released into the public domain",)),
+)
+
+
+@dataclass(frozen=True)
+class LicenseInfo:
+    """What a repo's license situation looks like, read from the filesystem only."""
+
+    name: str | None  # SPDX-ish id, "unknown" (file present, unrecognized), or None (nothing found)
+    source_file: str  # the file the name was read from, or ""
+    provenance: tuple[str, ...]  # third-party-notices / attribution / SBOM artifacts present
+
+
+def _identify_license_text(text: str) -> str | None:
+    """Name the license in a block of text: an explicit SPDX tag wins, else a signature match,
+    else None (present but unrecognized)."""
+    spdx = _SPDX_RE.search(text)
+    if spdx:
+        return spdx.group(1)
+    low = text.lower()
+    for name, needles in _LICENSE_SIGNATURES:
+        if all(needle in low for needle in needles):
+            return name
+    return None
+
+
+def _license_declared_in_pyproject(path: Path) -> str | None:
+    """A license DECLARED in pyproject.toml (a `[project].license` string/table, or an OSI
+    classifier), used only as a fallback when no LICENSE file is present. None if not declared
+    or the file is unparseable (a malformed pyproject is not this check's business)."""
+    pyproject = path / "pyproject.toml"
+    if not pyproject.is_file():
+        return None
+    try:
+        data = tomllib.loads(pyproject.read_text(errors="ignore"))
+    except (tomllib.TOMLDecodeError, ValueError):
+        return None
+    project = data.get("project", {})
+    if not isinstance(project, dict):
+        return None
+    lic = project.get("license")
+    if isinstance(lic, str) and lic.strip():
+        return lic.strip()
+    if isinstance(lic, dict) and isinstance(lic.get("text"), str) and lic["text"].strip():
+        return lic["text"].strip()
+    for classifier in project.get("classifiers", []):
+        if isinstance(classifier, str) and classifier.startswith("License :: OSI Approved ::"):
+            return classifier.split("::")[-1].strip()
+    return None
+
+
+def detect_license(path: Path) -> LicenseInfo:
+    """Read a repo's license + provenance from disk (no network). A LICENSE file is the primary
+    signal (typed by SPDX tag or text signature); a pyproject declaration is the fallback. A
+    missing license reads as name=None -- a real gap (reuse rights unclear), never a fabrication."""
+    provenance = tuple(name for name in _PROVENANCE_FILES if (path / name).is_file())
+    for filename in _LICENSE_FILES:
+        candidate = path / filename
+        if candidate.is_file():
+            name = _identify_license_text(candidate.read_text(errors="ignore")) or "unknown"
+            return LicenseInfo(name=name, source_file=filename, provenance=provenance)
+    declared = _license_declared_in_pyproject(path)
+    if declared:
+        return LicenseInfo(
+            name=declared, source_file="pyproject.toml (declared)", provenance=provenance
+        )
+    return LicenseInfo(name=None, source_file="", provenance=provenance)
+
+
 class GhProbe:
     """The production probe: workflow count from disk, issue/PR data from `gh` (network).
 
@@ -119,11 +226,15 @@ class GhProbe:
     """
 
     def signals(self, path: Path) -> RepoSignals:
+        lic = detect_license(path)
         return RepoSignals(
             workflows=count_workflows(path),
             merged_prs=self._gh_merged_prs(path),
             performance=performance_evidence(path),
             readme=readme_coverage(path),
+            license_name=lic.name,
+            license_file=lic.source_file,
+            provenance=lic.provenance,
         )
 
     def _gh_merged_prs(self, path: Path) -> int:
@@ -151,9 +262,13 @@ class OfflineProbe:
     """
 
     def signals(self, path: Path) -> RepoSignals:
+        lic = detect_license(path)
         return RepoSignals(
             workflows=count_workflows(path),
             merged_prs=0,
             performance=performance_evidence(path),
             readme=readme_coverage(path),
+            license_name=lic.name,
+            license_file=lic.source_file,
+            provenance=lic.provenance,
         )
