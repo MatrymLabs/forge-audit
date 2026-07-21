@@ -130,6 +130,23 @@ def _grade_collaboration(signals: RepoSignals) -> Dimension:
     return Dimension("collaboration", WATCHLIST, "no merged-PR loop observed (or offline)")
 
 
+def _grade_license(signals: RepoSignals) -> Dimension:
+    """License + provenance hygiene: a recognized license is the signal. Absent or unrecognized
+    is a watchlist gap (reuse rights unclear), never a failure -- forge-audit grades any repo and
+    a missing license is a real but non-defamatory gap, like a missing README. When present, any
+    provenance artifacts (third-party notices, attribution, SBOM) are named as extra evidence."""
+    prov = f"; provenance: {', '.join(signals.provenance)}" if signals.provenance else ""
+    if signals.license_name is None:
+        return Dimension("license", WATCHLIST, "no license declared (reuse rights unclear)")
+    if signals.license_name == "unknown":
+        return Dimension(
+            "license",
+            WATCHLIST,
+            f"license file present ({signals.license_file}) but unrecognized{prov}",
+        )
+    return Dimension("license", PASS_V, f"{signals.license_name} ({signals.license_file}){prov}")
+
+
 # Which passing dimensions vouch for which role. Evidence-first: a signal is claimed
 # only when the dimension that proves it passes.
 _ROLE_EVIDENCE: dict[str, tuple[str, ...]] = {
@@ -140,6 +157,7 @@ _ROLE_EVIDENCE: dict[str, tuple[str, ...]] = {
     "collaboration": ("collaboration",),
     "performance": ("performance",),
     "documentation": ("readme",),
+    "compliance": ("license",),
 }
 
 
@@ -184,6 +202,7 @@ def build_scorecard(
         _grade_collaboration(signals),
         _grade_performance(signals),
         _grade_readme(signals),
+        _grade_license(signals),
     ]
 
     gaps = [f"{d.name}: {d.evidence}" for d in dims if d.verdict == FAIL_V]
