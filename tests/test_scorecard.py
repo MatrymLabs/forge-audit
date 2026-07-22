@@ -172,3 +172,40 @@ def test_the_scorecard_serializes_to_json_ready_dict(signals_all_green) -> None:
     assert d["verdict"] == PASS_V
     assert isinstance(d["dimensions"], list)
     assert {"name", "verdict", "evidence"} <= set(d["dimensions"][0])
+
+
+# --- per-file license conflict detection (compliance depth) ---------------------------
+def _license_signals(license_name, file_licenses):
+    return RepoSignals(
+        workflows=3,
+        merged_prs=4,
+        performance="benchmarks/",
+        readme=("purpose", "install", "run", "test"),
+        license_name=license_name,
+        license_file="LICENSE",
+        file_licenses=file_licenses,
+    )
+
+
+def test_a_copyleft_file_in_a_permissive_repo_is_flagged(signals_all_green) -> None:
+    card = _card(green(90), _license_signals("MIT", (("GPL-3.0", 2),)))
+    lic = next(d for d in card.dimensions if d.name == "license")
+    assert lic.verdict == WATCHLIST
+    assert (
+        "copyleft" in lic.evidence and "GPL-3.0" in lic.evidence and "contamination" in lic.evidence
+    )
+
+
+def test_source_files_matching_the_declared_license_still_pass(signals_all_green) -> None:
+    card = _card(green(90), _license_signals("MIT", (("MIT", 40),)))
+    assert next(d for d in card.dimensions if d.name == "license").verdict == PASS_V
+
+
+def test_a_non_copyleft_foreign_license_is_a_watchlist(signals_all_green) -> None:
+    card = _card(green(90), _license_signals("MIT", (("Apache-2.0", 1),)))
+    lic = next(d for d in card.dimensions if d.name == "license")
+    assert (
+        lic.verdict == WATCHLIST
+        and "another license" in lic.evidence
+        and "Apache-2.0" in lic.evidence
+    )

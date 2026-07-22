@@ -21,7 +21,13 @@ from forge_audit.engine import (
     diagnose,
     subprocess_runner,
 )
-from forge_audit.github import README_ESSENTIALS, OfflineProbe, RepoProbe, RepoSignals
+from forge_audit.github import (
+    COPYLEFT_LICENSES,
+    README_ESSENTIALS,
+    OfflineProbe,
+    RepoProbe,
+    RepoSignals,
+)
 
 # --- Verdict vocabulary ----------------------------------------------------------
 PASS_V = "pass"  # nosec B105 -- a verdict word, not a password
@@ -134,7 +140,12 @@ def _grade_license(signals: RepoSignals) -> Dimension:
     """License + provenance hygiene: a recognized license is the signal. Absent or unrecognized
     is a watchlist gap (reuse rights unclear), never a failure -- forge-audit grades any repo and
     a missing license is a real but non-defamatory gap, like a missing README. When present, any
-    provenance artifacts (third-party notices, attribution, SBOM) are named as extra evidence."""
+    provenance artifacts (third-party notices, attribution, SBOM) are named as extra evidence.
+
+    Compliance depth: a per-file SPDX scan flags source files whose license differs from the repo's
+    declared one. A COPYLEFT file inside a permissive repo (vendored code, a copied snippet) is a
+    real legal risk the root LICENSE hides -- so it drops the dimension to watchlist even when the
+    root license is clean."""
     prov = f"; provenance: {', '.join(signals.provenance)}" if signals.provenance else ""
     if signals.license_name is None:
         return Dimension("license", WATCHLIST, "no license declared (reuse rights unclear)")
@@ -143,6 +154,25 @@ def _grade_license(signals: RepoSignals) -> Dimension:
             "license",
             WATCHLIST,
             f"license file present ({signals.license_file}) but unrecognized{prov}",
+        )
+    # Per-file conflict scan: source files declaring a license other than the repo's declared one.
+    foreign = [(spdx, n) for spdx, n in signals.file_licenses if spdx != signals.license_name]
+    copyleft = [(spdx, n) for spdx, n in foreign if spdx in COPYLEFT_LICENSES]
+    if copyleft:
+        detail = ", ".join(f"{n} file(s) {spdx}" for spdx, n in copyleft)
+        return Dimension(
+            "license",
+            WATCHLIST,
+            f"{signals.license_name} declared, but copyleft licenses appear in source: {detail} "
+            f"(possible contamination){prov}",
+        )
+    if foreign:
+        detail = ", ".join(f"{n} file(s) {spdx}" for spdx, n in foreign)
+        return Dimension(
+            "license",
+            WATCHLIST,
+            f"{signals.license_name} declared, but some source files declare another license: "
+            f"{detail}{prov}",
         )
     return Dimension("license", PASS_V, f"{signals.license_name} ({signals.license_file}){prov}")
 

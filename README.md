@@ -64,7 +64,7 @@ refuses the run rather than grading a partial, misleading fleet.
 | `collaboration` | merged PRs (via the GitHub seam) | at least one closed issue→PR→merge loop |
 | `performance` | a benchmark artifact (`benchmarks/`, a `bench` Makefile target, or a `reports/` perf dir) | present (else a watchlist gap) |
 | `readme` | the README's content (purpose · install · run · test) | all four covered (else a watchlist gap naming what's missing) |
-| `license` | a LICENSE file (SPDX tag or text signature) or a `pyproject` declaration, plus any provenance artifacts (third-party notices / attribution / SBOM) | a recognized license is present (else a watchlist gap: reuse rights unclear) |
+| `license` | a LICENSE file (SPDX tag or text signature) or a `pyproject` declaration, plus any provenance artifacts (third-party notices / attribution / SBOM), plus a **per-file `SPDX-License-Identifier` scan** | a recognized license is present *and* no source file declares a conflicting license (else a watchlist gap: reuse rights unclear, or a **copyleft file in a permissive repo** = possible contamination) |
 
 ### Stage thresholds (baked in - the gate is objective, not vibes)
 
