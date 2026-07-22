@@ -1,0 +1,76 @@
+{
+  "generated": "2026-07-22",
+  "mode": "bare-clone filesystem-only license scan (no dev env installed)",
+  "tool": "forge-audit",
+  "note": "The deepened license dimension's FILESYSTEM layers (root-license detection + per-file SPDX conflict scan) graded on code forge-audit did not build. The env-dependent layers (dependency-license copyleft scan, SBOM validation + freshness) need each target's own .venv/committed SBOM and are proven in the self-audit + test suite, not here: mainstream permissive repos gitignore their SBOMs and carry no per-file SPDX headers, so the copyleft/SBOM guards correctly stay silent (zero false positives is the signal).",
+  "results": [
+    {
+      "repo": "numpy",
+      "github": "numpy/numpy",
+      "commit": "dbe3531557c7960ca2bbcffdbda8b3b2979b35b1",
+      "what": "array computing (meson + ruff + mypy)",
+      "root_license": "BSD-3-Clause",
+      "spdx_headers_scanned": 0,
+      "per_file_licenses": {},
+      "license_verdict": "pass",
+      "license_evidence": "BSD-3-Clause (LICENSE.txt)"
+    },
+    {
+      "repo": "pytest",
+      "github": "pytest-dev/pytest",
+      "commit": "532b20103ecf9972f752353f20088c5cc878003b",
+      "what": "test framework (ruff + mypy)",
+      "root_license": "MIT",
+      "spdx_headers_scanned": 0,
+      "per_file_licenses": {},
+      "license_verdict": "pass",
+      "license_evidence": "MIT (LICENSE)"
+    },
+    {
+      "repo": "pydantic",
+      "github": "pydantic/pydantic",
+      "commit": "7b3dd4cf4ba551c33c963f22627cdc566402d8f6",
+      "what": "data validation (ruff + mypy)",
+      "root_license": "MIT",
+      "spdx_headers_scanned": 0,
+      "per_file_licenses": {},
+      "license_verdict": "pass",
+      "license_evidence": "MIT (LICENSE)"
+    },
+    {
+      "repo": "flask",
+      "github": "pallets/flask",
+      "commit": "36e4a824f340fdee7ed50937ba8e7f6bc7d17f81",
+      "what": "web microframework (ruff + mypy)",
+      "root_license": "BSD-3-Clause",
+      "spdx_headers_scanned": 0,
+      "per_file_licenses": {},
+      "license_verdict": "pass",
+      "license_evidence": "BSD-3-Clause (LICENSE.txt)"
+    },
+    {
+      "repo": "requests",
+      "github": "psf/requests",
+      "commit": "69f84847045bef7a849cc994a26fe7ba8a169e95",
+      "what": "HTTP client (Apache-2.0 + NOTICE)",
+      "root_license": "Apache-2.0",
+      "spdx_headers_scanned": 0,
+      "per_file_licenses": {},
+      "license_verdict": "pass",
+      "license_evidence": "Apache-2.0 (LICENSE); provenance: NOTICE"
+    },
+    {
+      "repo": "Pillow",
+      "github": "python-pillow/Pillow",
+      "commit": "b741b7743024c872687c98c875930967be93ed8d",
+      "what": "imaging library (HPND license)",
+      "root_license": "unknown",
+      "spdx_headers_scanned": 1,
+      "per_file_licenses": {
+        "0BSD": 1
+      },
+      "license_verdict": "watchlist",
+      "license_evidence": "license file present (LICENSE) but unrecognized"
+    }
+  ]
+}
