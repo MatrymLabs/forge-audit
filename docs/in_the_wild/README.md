@@ -5,7 +5,10 @@ is a claim: *forge-audit grades a repo it did not build honestly, passing what i
 abstaining where it lacks the environment, respecting each repo's own toolchain, and
 flagging real issues without defaming a green-CI project.* This page is the proof: three
 well-known, well-run open-source Python repositories, each graded at the **advanced**
-stage (the strictest bar), with the raw JSON scorecards committed next to this file.
+stage (the strictest bar), with the raw JSON scorecards committed next to this file. A
+second panel below - [compliance depth in the wild](#compliance-depth-in-the-wild) - runs
+the deepened `license` dimension against six more repos to show it grades real foreign code
+without a single false positive.
 
 **These are excellent repositories.** The point is not to rank them. The point is to show
 what forge-audit does when it meets code it did not write: where it passes, where it
@@ -116,12 +119,53 @@ makes the call. Raw: [`httpx.scorecard.json`](httpx.scorecard.json).
 
 ---
 
-## What these three prove
+## Compliance depth in the wild
+
+The `license` dimension is now four layers deep: root-license detection, a **per-file
+`SPDX-License-Identifier` scan**, a **dependency-license copyleft scan**, and **SBOM
+validation + a staleness cross-check**. The two filesystem layers need no dev environment,
+so they grade a bare clone directly. Run 2026-07-22 against six well-known repos (raw:
+[`compliance_scan.json`](compliance_scan.json)):
+
+| Repo | Commit | Root license | SPDX headers | License verdict |
+|---|---|---|---|---|
+| [numpy](https://github.com/numpy/numpy) | `dbe3531` | BSD-3-Clause | 0 | ✅ pass |
+| [pytest](https://github.com/pytest-dev/pytest) | `532b201` | MIT | 0 | ✅ pass |
+| [pydantic](https://github.com/pydantic/pydantic) | `7b3dd4c` | MIT | 0 | ✅ pass |
+| [flask](https://github.com/pallets/flask) | `36e4a82` | BSD-3-Clause | 0 | ✅ pass |
+| [requests](https://github.com/psf/requests) | `69f8484` | Apache-2.0 (+ NOTICE) | 0 | ✅ pass |
+| [Pillow](https://github.com/python-pillow/Pillow) | `b741b77` | *unrecognized* | 1 | 🔶 watchlist |
+
+**Read it:**
+
+- **Detection spans the permissive licenses**, not just MIT: BSD-3-Clause (numpy, flask),
+  Apache-2.0 (requests, whose `NOTICE` file is also surfaced as provenance).
+- **The per-file scan ran on every repo and raised nothing false.** Mainstream permissive
+  Python does not carry per-file SPDX headers, so the conflict scan correctly stays silent.
+  For a compliance check, **zero false positives on code it did not write is the signal** -
+  a tool that cried "contamination" on numpy would be worthless.
+- **Pillow abstains, it does not guess.** forge-audit does not recognize Pillow's HPND
+  license text, so the dimension reads `watchlist - present but unrecognized`, never a wrong
+  guess and never a `fail`. That is the same honesty the `tests`/`typecheck` gates show when
+  the environment is thin: **say "unknown," never fake a verdict.**
+
+The two env-dependent layers (the **GPL/AGPL dependency scan** and **SBOM validation +
+freshness**) need each target's own `.venv` and committed SBOM, which mainstream repos
+gitignore. They are proven instead in the [self-audit](../../README.md#it-audits-itself) and
+the test suite: forge-audit grades its **own** installed dependencies (correctly ignoring its
+MPL-2.0 and LGPL deps, and it would flag a GPL one) and its **own** freshly generated
+CycloneDX SBOM (67 components, cross-checked against what is installed). Same rule as the
+whole page: measure what the environment permits, and say so plainly where it does not.
+
+---
+
+## What these prove
 
 - **It passes what is clean.** tenacity's tests, httpx's lint/typecheck/tests: real green, on real execution.
-- **It abstains, never defames.** Missing deps or an un-collectable suite read `watchlist - not graded here`, never `fail`. A green-CI project is never called broken because our environment is thin.
+- **It abstains, never defames.** Missing deps or an un-collectable suite read `watchlist - not graded here`, never `fail`. A green-CI project is never called broken because our environment is thin. An unrecognized license reads `watchlist - unrecognized`, never a wrong guess.
 - **It respects the repo's own toolchain.** rich lints with black; forge-audit does not impose ruff on it.
 - **It reports real findings transparently.** httpx's digest-auth hash and rich's bandit highs are surfaced with counts and evidence, for a human to interpret. No black box, no flattery.
+- **Its compliance depth does not cry wolf.** The per-file license scan runs on real foreign code and raises nothing false; the copyleft/SBOM guards stay silent unless there is something real to flag.
 
 forge-audit reports **readiness**, never certification. A verdict here is a measurement against
 an objective bar, not a judgment of a project's worth.
