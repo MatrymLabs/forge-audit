@@ -27,6 +27,7 @@ from forge_audit.github import (
     OfflineProbe,
     RepoProbe,
     RepoSignals,
+    is_strong_copyleft,
 )
 
 # --- Verdict vocabulary ----------------------------------------------------------
@@ -145,7 +146,9 @@ def _grade_license(signals: RepoSignals) -> Dimension:
     Compliance depth: a per-file SPDX scan flags source files whose license differs from the repo's
     declared one. A COPYLEFT file inside a permissive repo (vendored code, a copied snippet) is a
     real legal risk the root LICENSE hides -- so it drops the dimension to watchlist even when the
-    root license is clean."""
+    root license is clean. A supply-chain scan does the same for installed dependencies: a STRONG
+    (GPL/AGPL) copyleft dependency in a permissive project is a distribution obligation the root
+    LICENSE says nothing about (LGPL/MPL deps are weak/file-level and deliberately not flagged)."""
     prov = f"; provenance: {', '.join(signals.provenance)}" if signals.provenance else ""
     if signals.license_name is None:
         return Dimension("license", WATCHLIST, "no license declared (reuse rights unclear)")
@@ -165,6 +168,16 @@ def _grade_license(signals: RepoSignals) -> Dimension:
             WATCHLIST,
             f"{signals.license_name} declared, but copyleft licenses appear in source: {detail} "
             f"(possible contamination){prov}",
+        )
+    # Supply-chain scan: installed dependencies under strong (GPL/AGPL) copyleft.
+    copyleft_deps = [(lic, n) for lic, n in signals.dependency_licenses if is_strong_copyleft(lic)]
+    if copyleft_deps:
+        detail = ", ".join(f"{n} dep(s) {lic}" for lic, n in copyleft_deps)
+        return Dimension(
+            "license",
+            WATCHLIST,
+            f"{signals.license_name} declared, but strong-copyleft dependencies are installed: "
+            f"{detail} (distribution obligation){prov}",
         )
     if foreign:
         detail = ", ".join(f"{n} file(s) {spdx}" for spdx, n in foreign)

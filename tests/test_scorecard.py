@@ -209,3 +209,34 @@ def test_a_non_copyleft_foreign_license_is_a_watchlist(signals_all_green) -> Non
         and "another license" in lic.evidence
         and "Apache-2.0" in lic.evidence
     )
+
+
+# --- dependency (supply-chain) license detection -------------------------------------
+def _dep_signals(license_name, dependency_licenses):
+    return RepoSignals(
+        workflows=3,
+        merged_prs=4,
+        performance="benchmarks/",
+        readme=("purpose", "install", "run", "test"),
+        license_name=license_name,
+        license_file="LICENSE",
+        dependency_licenses=dependency_licenses,
+    )
+
+
+def test_a_strong_copyleft_dependency_in_a_permissive_repo_is_flagged(signals_all_green) -> None:
+    card = _card(green(90), _dep_signals("MIT", (("GPL-3.0-only", 1),)))
+    lic = next(d for d in card.dimensions if d.name == "license")
+    assert lic.verdict == WATCHLIST
+    assert "GPL-3.0-only" in lic.evidence and "obligation" in lic.evidence
+
+
+def test_a_weak_copyleft_dependency_does_not_flag(signals_all_green) -> None:
+    # MPL and LGPL deps are file-level/weak: a permissive repo may depend on them safely
+    card = _card(green(90), _dep_signals("MIT", (("MPL-2.0", 3), ("LGPL-3.0", 1))))
+    assert next(d for d in card.dimensions if d.name == "license").verdict == PASS_V
+
+
+def test_permissive_dependencies_still_pass(signals_all_green) -> None:
+    card = _card(green(90), _dep_signals("MIT", (("MIT", 40), ("Apache Software License", 11))))
+    assert next(d for d in card.dimensions if d.name == "license").verdict == PASS_V

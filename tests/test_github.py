@@ -9,8 +9,10 @@ from forge_audit.github import (
     OfflineProbe,
     count_workflows,
     detect_license,
+    is_strong_copyleft,
     performance_evidence,
     readme_coverage,
+    scan_dependency_licenses,
     scan_file_licenses,
 )
 
@@ -230,3 +232,55 @@ def test_scan_ignores_non_source_files(tmp_path: Path) -> None:
 def test_the_probe_reports_file_licenses(tmp_path: Path) -> None:
     (tmp_path / "a.py").write_text("# SPDX-License-Identifier: MIT\n")
     assert OfflineProbe().signals(tmp_path).file_licenses == (("MIT", 1),)
+
+
+# --- dependency (supply-chain) license scan -----------------------------------------
+def _install_dist(root: Path, name: str, metadata: str) -> None:
+    """Fake an installed dist by writing its dist-info METADATA into a .venv, as pip would."""
+    dist = root / ".venv" / "lib" / "python3.13" / "site-packages" / f"{name}.dist-info"
+    dist.mkdir(parents=True)
+    (dist / "METADATA").write_text(metadata)
+
+
+def test_is_strong_copyleft_flags_gpl_and_agpl_but_not_lgpl_or_mpl() -> None:
+    assert is_strong_copyleft("GPL-3.0-or-later")
+    assert is_strong_copyleft("GNU Affero General Public License v3")
+    assert is_strong_copyleft("AGPL-3.0")
+    # LGPL and MPL are weak/file-level copyleft: fine to depend on, must NOT be flagged
+    assert not is_strong_copyleft("LGPL-3.0")
+    assert not is_strong_copyleft("GNU Lesser General Public License v2 (LGPLv2)")
+    assert not is_strong_copyleft("MPL-2.0")
+    assert not is_strong_copyleft("MIT")
+
+
+def test_scan_dependency_licenses_reads_expression_classifier_and_field(tmp_path: Path) -> None:
+    _install_dist(tmp_path, "modern-1.0", "Name: modern\nLicense-Expression: MIT\n")  # SPDX wins
+    _install_dist(
+        tmp_path,
+        "classified-2.0",
+        "Name: classified\nClassifier: License :: OSI Approved :: Apache Software License\n",
+    )
+    _install_dist(tmp_path, "plain-3.0", "Name: plain\nLicense: BSD-3-Clause\n")
+    counts = scan_dependency_licenses(tmp_path)
+    assert counts == {"MIT": 1, "Apache Software License": 1, "BSD-3-Clause": 1}
+
+
+def test_scan_dependency_licenses_finds_a_gpl_dependency(tmp_path: Path) -> None:
+    _install_dist(tmp_path, "risky-9.9", "Name: risky\nLicense-Expression: GPL-3.0-only\n")
+    counts = scan_dependency_licenses(tmp_path)
+    assert any(is_strong_copyleft(lic) for lic in counts)
+
+
+def test_scan_dependency_licenses_skips_unknown_and_missing_fields(tmp_path: Path) -> None:
+    _install_dist(tmp_path, "murky-1.0", "Name: murky\nLicense: UNKNOWN\n")
+    _install_dist(tmp_path, "bare-1.0", "Name: bare\nSummary: no license line at all\n")
+    assert scan_dependency_licenses(tmp_path) == {}
+
+
+def test_a_repo_with_no_venv_reports_no_dependency_licenses(tmp_path: Path) -> None:
+    assert scan_dependency_licenses(tmp_path) == {}  # a bare clone: nothing to read, never faked
+
+
+def test_the_probe_reports_dependency_licenses(tmp_path: Path) -> None:
+    _install_dist(tmp_path, "x-1.0", "Name: x\nLicense-Expression: MIT\n")
+    assert OfflineProbe().signals(tmp_path).dependency_licenses == (("MIT", 1),)
