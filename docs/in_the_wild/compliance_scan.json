@@ -7,7 +7,7 @@
     {
       "repo": "numpy",
       "github": "numpy/numpy",
-      "commit": "dbe3531557c7960ca2bbcffdbda8b3b2979b35b1",
+      "commit": "dbe3531",
       "what": "array computing (meson + ruff + mypy)",
       "root_license": "BSD-3-Clause",
       "spdx_headers_scanned": 0,
@@ -18,7 +18,7 @@
     {
       "repo": "pytest",
       "github": "pytest-dev/pytest",
-      "commit": "532b20103ecf9972f752353f20088c5cc878003b",
+      "commit": "532b201",
       "what": "test framework (ruff + mypy)",
       "root_license": "MIT",
       "spdx_headers_scanned": 0,
@@ -29,7 +29,7 @@
     {
       "repo": "pydantic",
       "github": "pydantic/pydantic",
-      "commit": "7b3dd4cf4ba551c33c963f22627cdc566402d8f6",
+      "commit": "7b3dd4c",
       "what": "data validation (ruff + mypy)",
       "root_license": "MIT",
       "spdx_headers_scanned": 0,
@@ -40,7 +40,7 @@
     {
       "repo": "flask",
       "github": "pallets/flask",
-      "commit": "36e4a824f340fdee7ed50937ba8e7f6bc7d17f81",
+      "commit": "36e4a82",
       "what": "web microframework (ruff + mypy)",
       "root_license": "BSD-3-Clause",
       "spdx_headers_scanned": 0,
@@ -51,7 +51,7 @@
     {
       "repo": "requests",
       "github": "psf/requests",
-      "commit": "69f84847045bef7a849cc994a26fe7ba8a169e95",
+      "commit": "69f8484",
       "what": "HTTP client (Apache-2.0 + NOTICE)",
       "root_license": "Apache-2.0",
       "spdx_headers_scanned": 0,
@@ -62,7 +62,7 @@
     {
       "repo": "Pillow",
       "github": "python-pillow/Pillow",
-      "commit": "b741b7743024c872687c98c875930967be93ed8d",
+      "commit": "b741b77",
       "what": "imaging library (HPND license)",
       "root_license": "unknown",
       "spdx_headers_scanned": 1,
