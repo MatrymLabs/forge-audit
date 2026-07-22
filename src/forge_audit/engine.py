@@ -1,7 +1,9 @@
 """CARD: engine -- DiagnosticEngine: run the quality gates on a target repo.
 
-The engine ignites each gate (ruff, mypy, pytest --cov, bandit, pip-audit) against a
-target repository and returns a GateReading per gate. Two rules keep the reading honest:
+The engine detects the repo's ECOSYSTEM and grades it with that ecosystem's own toolchain: a
+Python repo through ruff/mypy/pytest/bandit/pip-audit, a Node repo through its package.json scripts
+(lint/typecheck/test) + npm audit. Every path emits the same dimension names, so "grade any repo"
+is literal, not Python-only. Two rules keep the reading honest:
 
   1. Audit a repo with ITS OWN toolchain. Each tool is resolved from the target's
      `.venv/bin/` first, so codeforge is graded with codeforge's installed deps and
@@ -15,6 +17,7 @@ shell out. No claim without evidence.
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -341,8 +344,101 @@ def _evidence(tool: str, out: str) -> str:
     return _summarize(out)
 
 
+# --- ecosystem detection + the Node/npm toolchain -------------------------------
+# "Grade any repo" means grading it with ITS ecosystem's tools, not Python's. We detect the primary
+# ecosystem by manifest and dispatch. Python wins when both are present (a Python repo may ship a
+# package.json for a JS asset; its gate is still Python).
+
+
+def detect_ecosystem(path: Path) -> str:
+    """The repo's primary language ecosystem, by manifest: `python` | `node` | `unknown`."""
+    if (
+        (path / "pyproject.toml").is_file()
+        or (path / "setup.py").is_file()
+        or (path / "setup.cfg").is_file()
+        or any(path.glob("requirements*.txt"))
+    ):
+        return "python"
+    if (path / "package.json").is_file():
+        return "node"
+    return "unknown"
+
+
+def _node_scripts(path: Path) -> dict[str, str]:
+    """The `scripts` map from package.json ({} if missing or malformed)."""
+    try:
+        data = json.loads((path / "package.json").read_text(encoding="utf-8", errors="ignore"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    scripts = data.get("scripts", {}) if isinstance(data, dict) else {}
+    return {str(k): str(v) for k, v in scripts.items()} if isinstance(scripts, dict) else {}
+
+
+def _has_node_modules(path: Path, runner: Runner) -> bool:
+    """Did we have the target's installed JS deps to grade with? (node_modules present.) Under a
+    fake runner the injected result is authoritative, so we assume the env is present."""
+    if runner is not subprocess_runner:
+        return True
+    return (path / "node_modules").is_dir()
+
+
+def _run_npm_script(gate: str, script: str, path: Path, runner: Runner) -> GateReading:
+    """One Node gate: `npm run <script>` if the repo defines it. Abstains honestly when the script
+    is absent (the repo doesn't run that gate) or node_modules is missing (we lack its env)."""
+    if script not in _node_scripts(path):
+        return GateReading(gate, NOT_CONFIGURED, f"no `{script}` script in package.json")
+    if not _has_node_modules(path, runner):
+        return GateReading(
+            gate,
+            NOT_RUNNABLE,
+            f"`npm run {script}` needs the target's node_modules; run `npm install` to grade",
+        )
+    npm = _resolve("npm", runner, path)
+    if npm is None:
+        return GateReading(gate, NOT_CONFIGURED, "npm not found on PATH")
+    try:
+        result = runner([npm, "run", script], path)
+    except Exception as exc:
+        return GateReading(gate, ERROR, f"npm raised: {exc}")
+    return GateReading(gate, PASS if result.code == 0 else FAIL, _summarize(result.out))
+
+
+def _run_npm_audit(path: Path, runner: Runner) -> GateReading:
+    """The Node dependency gate: `npm audit --audit-level=high` (block on high+, mirroring the
+    Python deps gate's severity floor). Needs a lockfile or installed tree to resolve advisories."""
+    if not _has_node_modules(path, runner) and not (path / "package-lock.json").is_file():
+        return GateReading(
+            "dependencies", NOT_RUNNABLE, "npm audit needs a lockfile or node_modules to resolve"
+        )
+    npm = _resolve("npm", runner, path)
+    if npm is None:
+        return GateReading("dependencies", NOT_CONFIGURED, "npm not found on PATH")
+    try:
+        result = runner([npm, "audit", "--audit-level=high"], path)
+    except Exception as exc:
+        return GateReading("dependencies", ERROR, f"npm raised: {exc}")
+    return GateReading("dependencies", PASS if result.code == 0 else FAIL, _summarize(result.out))
+
+
+def _node_readings(path: Path, runner: Runner) -> list[GateReading]:
+    """Grade a Node repo through its package.json scripts + npm audit. Emits the same dimension
+    names the scorecard grades. Coverage isn't parsed for JS yet (tests read as green-without-a-
+    coverage-number -> a watchlist, honestly), and there is no standard Node SAST gate."""
+    return [
+        _run_npm_script("lint", "lint", path, runner),
+        _run_npm_script("typecheck", "typecheck", path, runner),
+        _run_npm_script("tests", "test", path, runner),
+        GateReading("security", NOT_CONFIGURED, "no standard Node SAST gate (JS ecosystem)"),
+        _run_npm_audit(path, runner),
+    ]
+
+
 def diagnose(path: Path, runner: Runner = subprocess_runner) -> list[GateReading]:
-    """Run every gate against the target repo and return the readings in gate order."""
+    """Run every gate against the target repo with ITS ecosystem's toolchain, and return the
+    readings. Python and Node are graded natively; an unknown ecosystem falls back to the Python
+    gates (which will abstain honestly if their tools aren't there)."""
+    if detect_ecosystem(path) == "node":
+        return _node_readings(path, runner)
     specs = _gate_specs(path)
     readings = [run_gate(g, tool, args, path, runner) for g, tool, args in specs]
     readings.insert(2, run_tests(path, runner))  # tests sit after typecheck

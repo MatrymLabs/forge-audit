@@ -13,6 +13,7 @@ from forge_audit.engine import (
     NOT_RUNNABLE,
     PASS,
     CommandResult,
+    detect_ecosystem,
     diagnose,
     run_gate,
     run_tests,
@@ -337,3 +338,75 @@ def test_bandit_severity_counts_ignore_the_confidence_block() -> None:
 
     assert _summarize_bandit(_BANDIT_TAIL) == "1 high, 8 medium severity issue(s)"
     assert _summarize_bandit("no severity tally here") is None
+
+
+# --- multi-language: ecosystem detection + Node/npm toolchain -------------------------
+_CR = CommandResult
+
+
+def _write_package_json(path: Path, scripts: dict[str, str]) -> None:
+    import json
+
+    (path / "package.json").write_text(json.dumps({"name": "x", "scripts": scripts}))
+
+
+def _npm_runner(by_script: dict[str, _CR]):
+    """A fake Runner that keys on the npm script/subcommand, not argv[0] (all npm here)."""
+
+    def run(argv, cwd):
+        key = (
+            argv[2] if len(argv) > 2 and argv[1] == "run" else argv[1]
+        )  # `npm run X` or `npm audit`
+        return by_script.get(key, _CR(0, "ok"))
+
+    return run
+
+
+def test_detect_ecosystem(tmp_path: Path) -> None:
+    assert detect_ecosystem(tmp_path) == "unknown"
+    (tmp_path / "package.json").write_text('{"name":"x"}')
+    assert detect_ecosystem(tmp_path) == "node"
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
+    assert detect_ecosystem(tmp_path) == "python"  # python wins when both manifests are present
+
+
+def test_a_node_repo_is_graded_through_its_package_json_scripts(tmp_path: Path) -> None:
+    _write_package_json(
+        tmp_path, {"lint": "eslint .", "typecheck": "tsc --noEmit", "test": "vitest"}
+    )
+    runner = _npm_runner(
+        {
+            "lint": _CR(0, "ok"),
+            "typecheck": _CR(0, "ok"),
+            "test": _CR(1, "1 failed"),
+            "audit": _CR(0, "ok"),
+        }
+    )
+    by_name = {r.gate: r for r in diagnose(tmp_path, runner)}
+    assert by_name["lint"].status == PASS
+    assert by_name["typecheck"].status == PASS
+    assert by_name["tests"].status == FAIL  # `npm run test` exited non-zero
+    assert by_name["tests"].coverage is None  # JS coverage not parsed yet
+    assert by_name["security"].status == NOT_CONFIGURED  # no standard Node SAST
+    assert by_name["dependencies"].status == PASS  # npm audit clean
+
+
+def test_a_missing_node_script_abstains_not_configured(tmp_path: Path) -> None:
+    _write_package_json(tmp_path, {"test": "vitest"})  # no lint / typecheck scripts
+    by_name = {r.gate: r for r in diagnose(tmp_path, _npm_runner({}))}
+    assert by_name["lint"].status == NOT_CONFIGURED and "no `lint` script" in by_name["lint"].detail
+    assert by_name["typecheck"].status == NOT_CONFIGURED
+
+
+def test_npm_audit_fails_on_high_vulnerabilities(tmp_path: Path) -> None:
+    _write_package_json(tmp_path, {"lint": "eslint ."})
+    runner = _npm_runner({"audit": _CR(1, "found 2 high severity vulnerabilities")})
+    deps = next(r for r in diagnose(tmp_path, runner) if r.gate == "dependencies")
+    assert deps.status == FAIL and "high severity" in deps.detail
+
+
+def test_a_python_repo_still_uses_the_python_gates(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text("[tool.ruff]\n")
+    by_name = {r.gate: r for r in diagnose(tmp_path, FakeRunner(green(90)))}
+    assert by_name["lint"].status == PASS  # ruff, the Python gate (not npm)
+    assert by_name["tests"].coverage == 90  # pytest coverage still parsed
