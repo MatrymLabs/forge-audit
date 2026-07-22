@@ -8,8 +8,10 @@
 **The proof-tool.** A portfolio makes a claim - *this engineer uses AI as a force
 multiplier, wrapped in automated evidence, quality gates, and delivery mechanics.*
 `forge-audit` **proves** that claim instead of asserting it: point it at a repository and
-it runs the quality gates, reads the collaboration signals, and forges a machine-checkable
-**JSON scorecard** graded against objective stage thresholds.
+it runs the quality gates **in that repo's own ecosystem** (a Python repo through
+ruff/mypy/pytest/bandit/pip-audit; a Node repo through its `package.json` scripts +
+`npm audit`), reads the collaboration signals, and forges a machine-checkable **JSON scorecard**
+graded against objective stage thresholds.
 
 > *No claim without correspondence.* Every verdict quotes its evidence. A gate whose tool
 > is absent reads `not_configured` - it is never faked as passing.
