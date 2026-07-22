@@ -240,3 +240,44 @@ def test_a_weak_copyleft_dependency_does_not_flag(signals_all_green) -> None:
 def test_permissive_dependencies_still_pass(signals_all_green) -> None:
     card = _card(green(90), _dep_signals("MIT", (("MIT", 40), ("Apache Software License", 11))))
     assert next(d for d in card.dimensions if d.name == "license").verdict == PASS_V
+
+
+# --- SBOM validation depth ----------------------------------------------------------
+def _sbom_signals(sbom):
+    return RepoSignals(
+        workflows=3,
+        merged_prs=4,
+        performance="benchmarks/",
+        readme=("purpose", "install", "run", "test"),
+        license_name="MIT",
+        license_file="LICENSE",
+        sbom=sbom,
+    )
+
+
+def test_a_valid_sbom_enriches_the_license_evidence(signals_all_green) -> None:
+    from forge_audit.sbom import SbomInfo
+
+    good = SbomInfo("sbom.cdx.json", "CycloneDX", "1.6", 67, valid=True, problem="")
+    card = _card(green(90), _sbom_signals(good))
+    lic = next(d for d in card.dimensions if d.name == "license")
+    assert lic.verdict == PASS_V
+    assert (
+        "SBOM" in lic.evidence and "CycloneDX" in lic.evidence and "67 components" in lic.evidence
+    )
+
+
+def test_an_invalid_sbom_drops_the_license_to_watchlist(signals_all_green) -> None:
+    from forge_audit.sbom import SbomInfo
+
+    broken = SbomInfo("sbom.json", "unknown", "", 0, valid=False, problem="SBOM is not valid JSON")
+    card = _card(green(90), _sbom_signals(broken))
+    lic = next(d for d in card.dimensions if d.name == "license")
+    assert lic.verdict == WATCHLIST
+    assert "not valid JSON" in lic.evidence and "sbom.json" in lic.evidence
+
+
+def test_no_sbom_is_not_penalized(signals_all_green) -> None:
+    # A repo that ships no SBOM (often gitignored generated evidence) still passes a clean license.
+    card = _card(green(90), _sbom_signals(None))
+    assert next(d for d in card.dimensions if d.name == "license").verdict == PASS_V

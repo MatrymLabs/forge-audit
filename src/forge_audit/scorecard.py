@@ -148,8 +148,19 @@ def _grade_license(signals: RepoSignals) -> Dimension:
     real legal risk the root LICENSE hides -- so it drops the dimension to watchlist even when the
     root license is clean. A supply-chain scan does the same for installed dependencies: a STRONG
     (GPL/AGPL) copyleft dependency in a permissive project is a distribution obligation the root
-    LICENSE says nothing about (LGPL/MPL deps are weak/file-level and deliberately not flagged)."""
+    LICENSE says nothing about (LGPL/MPL deps are weak/file-level and deliberately not flagged).
+
+    SBOM depth: a committed SBOM is supply-chain evidence, but only when the tool can actually read
+    it. A valid CycloneDX/SPDX SBOM enriches the evidence (format + component count); one that is
+    present but malformed is false assurance and drops the dimension to watchlist. A repo that ships
+    no SBOM is not penalized here -- an SBOM is often gitignored generated evidence."""
     prov = f"; provenance: {', '.join(signals.provenance)}" if signals.provenance else ""
+    sbom = signals.sbom
+    sbom_note = ""
+    if sbom is not None and sbom.valid:
+        sbom_note = (
+            f"; SBOM: {sbom.sbom_format} {sbom.spec_version} ({sbom.component_count} components)"
+        )
     if signals.license_name is None:
         return Dimension("license", WATCHLIST, "no license declared (reuse rights unclear)")
     if signals.license_name == "unknown":
@@ -187,7 +198,16 @@ def _grade_license(signals: RepoSignals) -> Dimension:
             f"{signals.license_name} declared, but some source files declare another license: "
             f"{detail}{prov}",
         )
-    return Dimension("license", PASS_V, f"{signals.license_name} ({signals.license_file}){prov}")
+    if sbom is not None and not sbom.valid:
+        return Dimension(
+            "license",
+            WATCHLIST,
+            f"{signals.license_name} declared, but the committed SBOM ({sbom.source_file}) is not "
+            f"usable as evidence: {sbom.problem}{prov}",
+        )
+    return Dimension(
+        "license", PASS_V, f"{signals.license_name} ({signals.license_file}){prov}{sbom_note}"
+    )
 
 
 # Which passing dimensions vouch for which role. Evidence-first: a signal is claimed
