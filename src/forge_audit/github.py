@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from forge_audit.sbom import SbomInfo, validate_sbom
+
 
 @dataclass(frozen=True)
 class RepoSignals:
@@ -33,6 +35,7 @@ class RepoSignals:
     file_licenses: tuple[tuple[str, int], ...] = ()  # per-file SPDX declarations: (spdx_id, count)
     # installed dependency licenses, from .venv dist-info: (license_string, dep_count)
     dependency_licenses: tuple[tuple[str, int], ...] = ()
+    sbom: SbomInfo | None = None  # validated SBOM, if the repo ships one; None if it ships none
 
 
 class RepoProbe(Protocol):
@@ -388,6 +391,7 @@ class GhProbe:
             provenance=lic.provenance,
             file_licenses=tuple(sorted(scan_file_licenses(path).items())),
             dependency_licenses=tuple(sorted(scan_dependency_licenses(path).items())),
+            sbom=validate_sbom(path),
         )
 
     def _gh_merged_prs(self, path: Path) -> int:
@@ -426,4 +430,5 @@ class OfflineProbe:
             provenance=lic.provenance,
             file_licenses=tuple(sorted(scan_file_licenses(path).items())),
             dependency_licenses=tuple(sorted(scan_dependency_licenses(path).items())),
+            sbom=validate_sbom(path),
         )

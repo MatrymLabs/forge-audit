@@ -284,3 +284,17 @@ def test_a_repo_with_no_venv_reports_no_dependency_licenses(tmp_path: Path) -> N
 def test_the_probe_reports_dependency_licenses(tmp_path: Path) -> None:
     _install_dist(tmp_path, "x-1.0", "Name: x\nLicense-Expression: MIT\n")
     assert OfflineProbe().signals(tmp_path).dependency_licenses == (("MIT", 1),)
+
+
+def test_the_probe_reports_a_validated_sbom(tmp_path: Path) -> None:
+    import json
+
+    (tmp_path / "sbom.cdx.json").write_text(
+        json.dumps({"bomFormat": "CycloneDX", "specVersion": "1.6", "components": [{"name": "a"}]})
+    )
+    sbom = OfflineProbe().signals(tmp_path).sbom
+    assert sbom is not None and sbom.valid and sbom.sbom_format == "CycloneDX"
+
+
+def test_the_probe_reports_no_sbom_as_none(tmp_path: Path) -> None:
+    assert OfflineProbe().signals(tmp_path).sbom is None
