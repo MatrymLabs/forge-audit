@@ -76,8 +76,8 @@ refuses the run rather than grading a partial, misleading fleet.
 
 The overall verdict is the worst dimension: any `fail` → **fail**; any `watchlist` →
 **watchlist**; otherwise **pass**. `role_signals` (testing · security · backend · devops ·
-collaboration · performance · documentation) are claimed **only** when the dimensions that
-prove them pass.
+collaboration · performance · documentation · compliance) are claimed **only** when the dimensions
+that prove them pass.
 
 ### Auditing a repo you didn't build (the honest envelope)
 
