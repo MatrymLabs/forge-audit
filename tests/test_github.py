@@ -9,6 +9,7 @@ from forge_audit.github import (
     OfflineProbe,
     count_workflows,
     detect_license,
+    installed_distributions,
     is_strong_copyleft,
     performance_evidence,
     readme_coverage,
@@ -298,3 +299,13 @@ def test_the_probe_reports_a_validated_sbom(tmp_path: Path) -> None:
 
 def test_the_probe_reports_no_sbom_as_none(tmp_path: Path) -> None:
     assert OfflineProbe().signals(tmp_path).sbom is None
+
+
+def test_installed_distributions_reads_and_normalizes_names(tmp_path: Path) -> None:
+    _install_dist(tmp_path, "Requests-2.32.0", "Name: Requests\nLicense-Expression: Apache-2.0\n")
+    _install_dist(tmp_path, "te-4.0", "Name: typing_extensions\nLicense-Expression: PSF-2.0\n")
+    assert installed_distributions(tmp_path) == {"requests", "typing-extensions"}
+
+
+def test_installed_distributions_is_empty_without_a_venv(tmp_path: Path) -> None:
+    assert installed_distributions(tmp_path) == set()  # a bare clone: nothing to read

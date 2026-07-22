@@ -43,6 +43,12 @@ STAGES: dict[str, dict[str, int]] = {
     "advanced": {"coverage": 85, "workflows": 3},
 }
 
+# A committed SBOM should account for at least this share of what is actually installed. Below it,
+# the SBOM has drifted from reality (stale generated evidence). Generous so a fresh SBOM never trips
+# it; the check only runs when the target's env is present (else freshness cannot be judged).
+_SBOM_FRESHNESS_FLOOR = 0.70
+_SBOM_FRESHNESS_MIN_DISTS = 3  # too few installed deps to judge coverage meaningfully
+
 
 @dataclass(frozen=True)
 class Dimension:
@@ -137,6 +143,25 @@ def _grade_collaboration(signals: RepoSignals) -> Dimension:
     return Dimension("collaboration", WATCHLIST, "no merged-PR loop observed (or offline)")
 
 
+def _stale_sbom(signals: RepoSignals) -> str | None:
+    """Cross-check a valid SBOM against what is actually installed. Returns a description of the
+    drift if the SBOM omits too large a share of the installed dependencies (stale generated
+    evidence), else None. Only runs when both a valid SBOM and the target's env are present -- with
+    no `.venv` we cannot judge freshness, so we do not (the same honesty the runnable gates use)."""
+    sbom = signals.sbom
+    installed = set(signals.installed_dists)
+    if sbom is None or not sbom.valid or len(installed) < _SBOM_FRESHNESS_MIN_DISTS:
+        return None
+    missing = installed - set(sbom.component_names)
+    covered = len(installed) - len(missing)
+    if missing and covered / len(installed) < _SBOM_FRESHNESS_FLOOR:
+        return (
+            f"the committed SBOM ({sbom.source_file}) is stale: it omits {len(missing)} of "
+            f"{len(installed)} installed dependencies (regenerate it)"
+        )
+    return None
+
+
 def _grade_license(signals: RepoSignals) -> Dimension:
     """License + provenance hygiene: a recognized license is the signal. Absent or unrecognized
     is a watchlist gap (reuse rights unclear), never a failure -- forge-audit grades any repo and
@@ -151,9 +176,11 @@ def _grade_license(signals: RepoSignals) -> Dimension:
     LICENSE says nothing about (LGPL/MPL deps are weak/file-level and deliberately not flagged).
 
     SBOM depth: a committed SBOM is supply-chain evidence, but only when the tool can actually read
-    it. A valid CycloneDX/SPDX SBOM enriches the evidence (format + component count); one that is
-    present but malformed is false assurance and drops the dimension to watchlist. A repo that ships
-    no SBOM is not penalized here -- an SBOM is often gitignored generated evidence."""
+    it AND it reflects reality. A valid CycloneDX/SPDX SBOM enriches the evidence (format + count);
+    one that is present but malformed is false assurance and drops the dimension to watchlist; one
+    that is valid but STALE (omits much of what is actually installed) is drifted generated evidence
+    and also drops to watchlist. A repo that ships no SBOM is not penalized here -- an SBOM is often
+    gitignored generated evidence."""
     prov = f"; provenance: {', '.join(signals.provenance)}" if signals.provenance else ""
     sbom = signals.sbom
     sbom_note = ""
@@ -204,6 +231,11 @@ def _grade_license(signals: RepoSignals) -> Dimension:
             WATCHLIST,
             f"{signals.license_name} declared, but the committed SBOM ({sbom.source_file}) is not "
             f"usable as evidence: {sbom.problem}{prov}",
+        )
+    stale = _stale_sbom(signals)
+    if stale is not None:
+        return Dimension(
+            "license", WATCHLIST, f"{signals.license_name} declared, but {stale}{prov}"
         )
     return Dimension(
         "license", PASS_V, f"{signals.license_name} ({signals.license_file}){prov}{sbom_note}"

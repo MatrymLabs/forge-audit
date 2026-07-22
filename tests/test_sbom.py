@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from forge_audit.sbom import find_sbom, validate_sbom
+from forge_audit.sbom import find_sbom, normalize_dist_name, validate_sbom
 
 # --- minimal well-formed fixtures ---------------------------------------------------
 _CYCLONEDX = {
@@ -85,3 +85,23 @@ def test_find_sbom_prefers_the_most_specific_name(tmp_path: Path) -> None:
     _write(tmp_path, "sbom.cdx.json", _CYCLONEDX)
     found = find_sbom(tmp_path)
     assert found is not None and found.name == "sbom.cdx.json"
+
+
+def test_normalize_dist_name_follows_pep503() -> None:
+    assert normalize_dist_name("Typing_Extensions") == "typing-extensions"
+    assert normalize_dist_name("ruamel.yaml") == "ruamel-yaml"
+    assert normalize_dist_name("Flask") == "flask"
+
+
+def test_a_valid_sbom_exposes_normalized_component_names(tmp_path: Path) -> None:
+    _write(
+        tmp_path,
+        "sbom.cdx.json",
+        {
+            "bomFormat": "CycloneDX",
+            "specVersion": "1.6",
+            "components": [{"name": "Requests"}, {"name": "typing_extensions"}],
+        },
+    )
+    info = validate_sbom(tmp_path)
+    assert info is not None and info.component_names == ("requests", "typing-extensions")

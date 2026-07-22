@@ -11,8 +11,16 @@ only a file already in the repo.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
+
+
+def normalize_dist_name(name: str) -> str:
+    """PEP 503 name normalization: fold runs of -_. to a single hyphen, lowercase. So an SBOM
+    component and an installed dist-info name compare equal regardless of underscores/case."""
+    return re.sub(r"[-_.]+", "-", name).strip().lower()
+
 
 # Candidate SBOM filenames, most-specific first. CycloneDX and SPDX JSON are the machine formats
 # a tool can validate; `cyclonedx-py` writes `sbom.cdx.json`, so recognize that too.
@@ -37,6 +45,7 @@ class SbomInfo:
     component_count: int  # components (CycloneDX) / packages (SPDX) declared
     valid: bool  # structurally sound enough to trust as evidence
     problem: str  # why it is not valid ("" when valid)
+    component_names: tuple[str, ...] = ()  # normalized component names, for a freshness cross-check
 
 
 def find_sbom(path: Path) -> Path | None:
@@ -62,7 +71,8 @@ def _validate_cyclonedx(doc: dict, source: str) -> SbomInfo:
         return _invalid(source, "CycloneDX SBOM has no specVersion", "CycloneDX")
     if not isinstance(components, list) or not components:
         return _invalid(source, "CycloneDX SBOM lists no components", "CycloneDX", spec_str)
-    return SbomInfo(source, "CycloneDX", spec_str, len(components), True, "")
+    names = _component_names(components, "name")
+    return SbomInfo(source, "CycloneDX", spec_str, len(components), True, "", names)
 
 
 def _validate_spdx(doc: dict, source: str) -> SbomInfo:
@@ -74,7 +84,18 @@ def _validate_spdx(doc: dict, source: str) -> SbomInfo:
         return _invalid(source, "SPDX SBOM has no spdxVersion", "SPDX")
     if not isinstance(packages, list) or not packages:
         return _invalid(source, "SPDX SBOM lists no packages", "SPDX", spec_str)
-    return SbomInfo(source, "SPDX", spec_str, len(packages), True, "")
+    names = _component_names(packages, "name")
+    return SbomInfo(source, "SPDX", spec_str, len(packages), True, "", names)
+
+
+def _component_names(entries: list, key: str) -> tuple[str, ...]:
+    """The normalized, de-duplicated, sorted names of an SBOM's components/packages."""
+    found = {
+        normalize_dist_name(entry[key])
+        for entry in entries
+        if isinstance(entry, dict) and isinstance(entry.get(key), str) and entry[key]
+    }
+    return tuple(sorted(found))
 
 
 def validate_sbom(path: Path) -> SbomInfo | None:
