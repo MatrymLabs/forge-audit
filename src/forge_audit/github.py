@@ -31,6 +31,8 @@ class RepoSignals:
     license_file: str = ""  # where the license was read from ("" if none)
     provenance: tuple[str, ...] = ()  # third-party-notices / attribution / SBOM artifacts present
     file_licenses: tuple[tuple[str, int], ...] = ()  # per-file SPDX declarations: (spdx_id, count)
+    # installed dependency licenses, from .venv dist-info: (license_string, dep_count)
+    dependency_licenses: tuple[tuple[str, int], ...] = ()
 
 
 class RepoProbe(Protocol):
@@ -253,6 +255,54 @@ def scan_file_licenses(path: Path) -> dict[str, int]:
     return counts
 
 
+def is_strong_copyleft(license_str: str) -> bool:
+    """Does this license string name STRONG (GPL/AGPL) copyleft? A strong-copyleft *dependency* can
+    bind a whole distribution, a real supply-chain obligation. LGPL and MPL are deliberately left
+    out: they are weak / file-level copyleft, generally fine to depend on in a permissive project,
+    so flagging them would be a false alarm."""
+    low = license_str.lower()
+    if "lgpl" in low or "lesser" in low:
+        return False
+    return "gpl" in low or "affero" in low
+
+
+def _dist_license(metadata: str) -> str | None:
+    """The declared license of an installed dist, from its dist-info METADATA: a modern
+    `License-Expression:` (SPDX) wins, then an OSI `Classifier:`, then the free-text `License:`."""
+    expr = re.search(r"^License-Expression:\s*(.+)$", metadata, re.MULTILINE)
+    if expr:
+        return expr.group(1).strip()
+    classifier = re.search(r"^Classifier: License :: OSI Approved :: (.+)$", metadata, re.MULTILINE)
+    if classifier:
+        return classifier.group(1).strip()
+    plain = re.search(r"^License:\s*(.+)$", metadata, re.MULTILINE)
+    if plain and plain.group(1).strip().upper() != "UNKNOWN":
+        return plain.group(1).strip()
+    return None
+
+
+def scan_dependency_licenses(path: Path) -> dict[str, int]:
+    """Count the declared license of each INSTALLED dependency, read from the target's own
+    `.venv/**/site-packages/*.dist-info/METADATA` (no network). Returns {license_string: dep_count}.
+
+    This is supply-chain license compliance: a GPL/AGPL dependency inside a permissive project is a
+    real distribution obligation the root LICENSE says nothing about. A foreign repo we only cloned
+    has no .venv, so this simply reports nothing (never a fabrication)."""
+    counts: dict[str, int] = {}
+    scanned = 0
+    for metadata in path.glob(".venv/lib/*/site-packages/*.dist-info/METADATA"):
+        if scanned >= _SCAN_MAX_FILES:
+            break
+        scanned += 1
+        try:
+            declared = _dist_license(metadata.read_text(errors="ignore")[: _SCAN_HEAD_BYTES * 2])
+        except OSError:
+            continue
+        if declared:
+            counts[declared] = counts.get(declared, 0) + 1
+    return counts
+
+
 @dataclass(frozen=True)
 class LicenseInfo:
     """What a repo's license situation looks like, read from the filesystem only."""
@@ -337,6 +387,7 @@ class GhProbe:
             license_file=lic.source_file,
             provenance=lic.provenance,
             file_licenses=tuple(sorted(scan_file_licenses(path).items())),
+            dependency_licenses=tuple(sorted(scan_dependency_licenses(path).items())),
         )
 
     def _gh_merged_prs(self, path: Path) -> int:
@@ -374,4 +425,5 @@ class OfflineProbe:
             license_file=lic.source_file,
             provenance=lic.provenance,
             file_licenses=tuple(sorted(scan_file_licenses(path).items())),
+            dependency_licenses=tuple(sorted(scan_dependency_licenses(path).items())),
         )
