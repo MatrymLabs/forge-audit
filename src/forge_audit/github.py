@@ -30,6 +30,7 @@ class RepoSignals:
     # unrecognized; None if no license is declared anywhere.
     license_file: str = ""  # where the license was read from ("" if none)
     provenance: tuple[str, ...] = ()  # third-party-notices / attribution / SBOM artifacts present
+    file_licenses: tuple[tuple[str, int], ...] = ()  # per-file SPDX declarations: (spdx_id, count)
 
 
 class RepoProbe(Protocol):
@@ -151,6 +152,106 @@ _LICENSE_SIGNATURES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Unlicense", ("this is free and unencumbered software released into the public domain",)),
 )
 
+# SPDX ids whose obligations are copyleft. A copyleft-licensed file inside a permissively-licensed
+# repo is a real contamination signal: its terms can bind the whole distribution.
+COPYLEFT_LICENSES = frozenset(
+    {
+        "GPL-2.0",
+        "GPL-3.0",
+        "GPL-2.0-only",
+        "GPL-3.0-only",
+        "GPL-2.0-or-later",
+        "GPL-3.0-or-later",
+        "AGPL-3.0",
+        "AGPL-3.0-only",
+        "AGPL-3.0-or-later",
+        "LGPL-2.1",
+        "LGPL-3.0",
+        "LGPL-2.1-only",
+        "LGPL-3.0-only",
+        "MPL-2.0",
+        "EPL-2.0",
+        "CDDL-1.0",
+    }
+)
+
+# The per-file license scan skips vendored / build / VCS trees, reads only a file's head (an SPDX
+# header lives at the top), and caps the walk so a giant repo cannot stall the audit.
+_SCAN_SKIP_DIRS = frozenset(
+    {
+        ".git",
+        ".venv",
+        "venv",
+        "env",
+        "node_modules",
+        "vendor",
+        "vendored",
+        "third_party",
+        "dist",
+        "build",
+        "__pycache__",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".pytest_cache",
+        ".tox",
+        "site-packages",
+        ".eggs",
+    }
+)
+_SCAN_EXTS = frozenset(
+    {
+        ".py",
+        ".pyi",
+        ".js",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".go",
+        ".rs",
+        ".c",
+        ".h",
+        ".hpp",
+        ".cc",
+        ".cpp",
+        ".java",
+        ".kt",
+        ".rb",
+        ".php",
+        ".sh",
+        ".css",
+        ".scss",
+    }
+)
+_SCAN_MAX_FILES = 5000
+_SCAN_HEAD_BYTES = 4096
+
+
+def scan_file_licenses(path: Path) -> dict[str, int]:
+    """Count per-file `SPDX-License-Identifier` declarations across source files (no network).
+    Returns {spdx_id: file_count}; files with no SPDX header are not counted.
+
+    This is what turns license *detection* into license *compliance*: a GPL-tagged file inside an
+    MIT repo (vendored code, a copy-pasted snippet) is a real legal risk the root LICENSE hides."""
+    counts: dict[str, int] = {}
+    scanned = 0
+    for candidate in path.rglob("*"):
+        if scanned >= _SCAN_MAX_FILES:
+            break
+        if candidate.suffix not in _SCAN_EXTS or not candidate.is_file():
+            continue
+        if any(part in _SCAN_SKIP_DIRS for part in candidate.parts):
+            continue
+        scanned += 1
+        try:
+            head = candidate.read_text(errors="ignore")[:_SCAN_HEAD_BYTES]
+        except OSError:
+            continue
+        match = _SPDX_RE.search(head)
+        if match:
+            spdx = match.group(1)
+            counts[spdx] = counts.get(spdx, 0) + 1
+    return counts
+
 
 @dataclass(frozen=True)
 class LicenseInfo:
@@ -235,6 +336,7 @@ class GhProbe:
             license_name=lic.name,
             license_file=lic.source_file,
             provenance=lic.provenance,
+            file_licenses=tuple(sorted(scan_file_licenses(path).items())),
         )
 
     def _gh_merged_prs(self, path: Path) -> int:
@@ -271,4 +373,5 @@ class OfflineProbe:
             license_name=lic.name,
             license_file=lic.source_file,
             provenance=lic.provenance,
+            file_licenses=tuple(sorted(scan_file_licenses(path).items())),
         )

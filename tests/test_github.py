@@ -11,6 +11,7 @@ from forge_audit.github import (
     detect_license,
     performance_evidence,
     readme_coverage,
+    scan_file_licenses,
 )
 
 
@@ -201,3 +202,31 @@ def test_the_probe_reports_license_signals(tmp_path: Path) -> None:
     (tmp_path / "LICENSE").write_text(_MIT)
     signals = OfflineProbe().signals(tmp_path)
     assert signals.license_name == "MIT" and signals.license_file == "LICENSE"
+
+
+# --- per-file license scan (compliance depth) -----------------------------------
+def test_scan_file_licenses_counts_per_file_spdx(tmp_path: Path) -> None:
+    (tmp_path / "a.py").write_text("# SPDX-License-Identifier: MIT\nx = 1\n")
+    (tmp_path / "b.py").write_text("# SPDX-License-Identifier: GPL-3.0\ny = 2\n")
+    (tmp_path / "c.py").write_text("# SPDX-License-Identifier: MIT\nz = 3\n")
+    (tmp_path / "d.py").write_text("no header here\n")  # not counted
+    assert scan_file_licenses(tmp_path) == {"MIT": 2, "GPL-3.0": 1}
+
+
+def test_scan_skips_vendored_and_build_dirs(tmp_path: Path) -> None:
+    (tmp_path / ".venv").mkdir()
+    (tmp_path / ".venv" / "lib.py").write_text("# SPDX-License-Identifier: GPL-3.0\n")
+    (tmp_path / "node_modules").mkdir()
+    (tmp_path / "node_modules" / "x.js").write_text("// SPDX-License-Identifier: GPL-3.0\n")
+    (tmp_path / "real.py").write_text("# SPDX-License-Identifier: MIT\n")
+    assert scan_file_licenses(tmp_path) == {"MIT": 1}  # vendored GPL is not the repo's code
+
+
+def test_scan_ignores_non_source_files(tmp_path: Path) -> None:
+    (tmp_path / "data.json").write_text('{"SPDX-License-Identifier": "GPL-3.0"}')
+    assert scan_file_licenses(tmp_path) == {}
+
+
+def test_the_probe_reports_file_licenses(tmp_path: Path) -> None:
+    (tmp_path / "a.py").write_text("# SPDX-License-Identifier: MIT\n")
+    assert OfflineProbe().signals(tmp_path).file_licenses == (("MIT", 1),)
