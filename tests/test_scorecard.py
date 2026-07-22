@@ -281,3 +281,52 @@ def test_no_sbom_is_not_penalized(signals_all_green) -> None:
     # A repo that ships no SBOM (often gitignored generated evidence) still passes a clean license.
     card = _card(green(90), _sbom_signals(None))
     assert next(d for d in card.dimensions if d.name == "license").verdict == PASS_V
+
+
+# --- SBOM freshness cross-check (does the SBOM reflect what is installed?) -----------
+def _fresh_signals(sbom, installed_dists):
+    return RepoSignals(
+        workflows=3,
+        merged_prs=4,
+        performance="benchmarks/",
+        readme=("purpose", "install", "run", "test"),
+        license_name="MIT",
+        license_file="LICENSE",
+        sbom=sbom,
+        installed_dists=installed_dists,
+    )
+
+
+def _sbom_with(*names):
+    from forge_audit.sbom import SbomInfo
+
+    return SbomInfo("sbom.cdx.json", "CycloneDX", "1.6", len(names), True, "", tuple(names))
+
+
+def test_a_current_sbom_matching_installed_deps_passes(signals_all_green) -> None:
+    sbom = _sbom_with("requests", "rich", "httpx", "click")
+    card = _card(green(90), _fresh_signals(sbom, ("requests", "rich", "httpx", "click")))
+    assert next(d for d in card.dimensions if d.name == "license").verdict == PASS_V
+
+
+def test_a_stale_sbom_missing_most_installed_deps_is_watchlist(signals_all_green) -> None:
+    # SBOM lists one dep, but four are installed: it has drifted from reality (stale evidence)
+    sbom = _sbom_with("requests")
+    card = _card(green(90), _fresh_signals(sbom, ("requests", "rich", "httpx", "click")))
+    lic = next(d for d in card.dimensions if d.name == "license")
+    assert lic.verdict == WATCHLIST
+    assert "stale" in lic.evidence and "omits 3 of 4" in lic.evidence
+
+
+def test_sbom_freshness_is_not_judged_without_the_target_env(signals_all_green) -> None:
+    # No installed_dists (a foreign repo with no .venv): we cannot judge freshness, so we do not.
+    sbom = _sbom_with("requests")
+    card = _card(green(90), _fresh_signals(sbom, ()))
+    assert next(d for d in card.dimensions if d.name == "license").verdict == PASS_V
+
+
+def test_sbom_freshness_skips_tiny_environments(signals_all_green) -> None:
+    # Only two installed deps: too few to judge SBOM coverage meaningfully, so no false stale flag.
+    sbom = _sbom_with("requests")
+    card = _card(green(90), _fresh_signals(sbom, ("requests", "rich")))
+    assert next(d for d in card.dimensions if d.name == "license").verdict == PASS_V

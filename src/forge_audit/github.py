@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from forge_audit.sbom import SbomInfo, validate_sbom
+from forge_audit.sbom import SbomInfo, normalize_dist_name, validate_sbom
 
 
 @dataclass(frozen=True)
@@ -36,6 +36,7 @@ class RepoSignals:
     # installed dependency licenses, from .venv dist-info: (license_string, dep_count)
     dependency_licenses: tuple[tuple[str, int], ...] = ()
     sbom: SbomInfo | None = None  # validated SBOM, if the repo ships one; None if it ships none
+    installed_dists: tuple[str, ...] = ()  # normalized names of installed deps (for SBOM freshness)
 
 
 class RepoProbe(Protocol):
@@ -306,6 +307,27 @@ def scan_dependency_licenses(path: Path) -> dict[str, int]:
     return counts
 
 
+def installed_distributions(path: Path) -> set[str]:
+    """Normalized names of the target's installed dependencies, from `.venv` dist-info METADATA
+    `Name:` fields (no network). Empty when the target has no `.venv` -- the same env-availability
+    honesty the gates use: without the environment we cannot judge an SBOM's freshness, so we do
+    not claim to. Used to cross-check a committed SBOM against what is actually installed."""
+    names: set[str] = set()
+    scanned = 0
+    for metadata in path.glob(".venv/lib/*/site-packages/*.dist-info/METADATA"):
+        if scanned >= _SCAN_MAX_FILES:
+            break
+        scanned += 1
+        try:
+            head = metadata.read_text(errors="ignore")[:_SCAN_HEAD_BYTES]
+        except OSError:
+            continue
+        declared = re.search(r"^Name:\s*(.+)$", head, re.MULTILINE)
+        if declared:
+            names.add(normalize_dist_name(declared.group(1).strip()))
+    return names
+
+
 @dataclass(frozen=True)
 class LicenseInfo:
     """What a repo's license situation looks like, read from the filesystem only."""
@@ -392,6 +414,7 @@ class GhProbe:
             file_licenses=tuple(sorted(scan_file_licenses(path).items())),
             dependency_licenses=tuple(sorted(scan_dependency_licenses(path).items())),
             sbom=validate_sbom(path),
+            installed_dists=tuple(sorted(installed_distributions(path))),
         )
 
     def _gh_merged_prs(self, path: Path) -> int:
@@ -431,4 +454,5 @@ class OfflineProbe:
             file_licenses=tuple(sorted(scan_file_licenses(path).items())),
             dependency_licenses=tuple(sorted(scan_dependency_licenses(path).items())),
             sbom=validate_sbom(path),
+            installed_dists=tuple(sorted(installed_distributions(path))),
         )
