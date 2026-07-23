@@ -58,6 +58,31 @@ def test_a_genuine_test_failure_still_reads_fail() -> None:
     assert reading.status == FAIL
 
 
+def test_pytest_cov_absent_falls_back_to_a_plain_run_not_fail() -> None:
+    # pytest-cov not installed: `--cov` is rejected before any test runs. The suite is green;
+    # grading it fail for OUR missing plugin is the false-correspondence this tool guards against.
+    def runner(argv: list[str], path: Path) -> CommandResult:
+        if "--cov" in argv:
+            return CommandResult(4, "pytest: error: unrecognized arguments: --cov --cov-report")
+        return CommandResult(0, "10 passed in 5.32s")
+
+    reading = run_tests(HERE, runner)
+    assert reading.status == PASS
+    assert reading.coverage is None  # coverage genuinely unavailable, not faked
+    assert "pytest-cov absent" in reading.detail
+
+
+def test_cov_fallback_still_fails_a_genuinely_red_suite() -> None:
+    # The fall-back re-runs plain; if THAT is red, the suite really failed -- not masked.
+    def runner(argv: list[str], path: Path) -> CommandResult:
+        if "--cov" in argv:
+            return CommandResult(4, "pytest: error: unrecognized arguments: --cov")
+        return CommandResult(1, "1 failed, 9 passed in 5.0s")
+
+    reading = run_tests(HERE, runner)
+    assert reading.status == FAIL
+
+
 def test_mypy_missing_stub_reads_not_runnable_not_fail() -> None:
     out = "src/x.py:1: error: Cannot find implementation or library stub for module named 'httpx'"
     reading = run_gate(

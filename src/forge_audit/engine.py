@@ -46,6 +46,16 @@ _PYTEST_UNRUNNABLE = (
     "errors during collection",
     "internalerror",
 )
+
+
+def _cov_plugin_absent(out: str) -> bool:
+    """True if pytest rejected `--cov` as an unrecognized argument -- i.e. pytest-cov is not
+    installed in the target's env. That is OUR missing measurement capability, not a broken suite,
+    so the tests gate falls back to a plain run rather than grading a green suite red."""
+    low = out.lower()
+    return "unrecognized arguments" in low and "--cov" in low
+
+
 # mypy could not resolve the code's own imports (third-party deps/stubs absent), so its type verdict
 # is untrustworthy -- a missing environment, not a genuine type error.
 _MYPY_UNRUNNABLE = (
@@ -294,6 +304,16 @@ def run_tests(path: Path, runner: Runner) -> GateReading:
         result = runner([resolved, "--cov", "--cov-report=term-missing", "-q"], path)
     except Exception as exc:
         return GateReading("tests", ERROR, f"pytest raised: {exc}")
+    cov_note = ""
+    if result.code != 0 and _cov_plugin_absent(result.out):
+        # pytest-cov isn't installed, so `--cov` was rejected before any test ran. Re-run plain for
+        # an honest pass/fail -- grading a green suite red for OUR missing plugin is the exact
+        # false-correspondence this tool exists to catch. Coverage is simply unavailable here.
+        try:
+            result = runner([resolved, "-q"], path)
+        except Exception as exc:
+            return GateReading("tests", ERROR, f"pytest raised: {exc}")
+        cov_note = " (coverage not measured: pytest-cov absent)"
     if result.code != 0 and _matches(result.out, _PYTEST_UNRUNNABLE):
         # The suite could not be imported/collected here (deps absent) -- not a real failure.
         return GateReading(
@@ -308,7 +328,9 @@ def run_tests(path: Path, runner: Runner) -> GateReading:
             "(audit with the repo's own environment for a verdict)",
         )
     status = PASS if result.code == 0 else FAIL
-    return GateReading("tests", status, _summarize(result.out), _parse_coverage(result.out))
+    return GateReading(
+        "tests", status, _summarize(result.out) + cov_note, _parse_coverage(result.out)
+    )
 
 
 def _summarize(out: str) -> str:
