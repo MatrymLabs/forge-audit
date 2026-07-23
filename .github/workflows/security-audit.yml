@@ -1,0 +1,24 @@
+name: security-audit
+
+# Per-commit CI already runs the security gate; this re-runs it on a schedule to catch CVEs
+# disclosed BETWEEN commits (a dependency advisory published after your last push is invisible
+# to push-triggered CI until the next push). Weekly, plus on demand.
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[dev]"
+      - run: make security
